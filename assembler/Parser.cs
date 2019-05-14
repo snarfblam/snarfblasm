@@ -542,21 +542,13 @@ namespace snarfblasm
         }
 
         private bool ParseNamedLabels(ref StringSection line, int iParsedLine, int iSourceLine) {
-            int iColon = line.IndexOf(':');
-            if (iColon < 0)
-                return false;
+            var lineCopy = line;
+            var labelName = GrabLabelName(ref lineCopy);
+            if (labelName.IsNullOrEmpty) return false;
 
-            if ((line.Length- 1 > iColon) && (line[iColon + 1] == '=')) {
-                // := is not a label
-                return false;
-            }
-
-            var labelName = line.Substring(0, iColon).Trim();
-            // Todo: should be able to validate via a 'parse symbol' func
-
-            // Check for nonzero length and that label starts with letter or @
+            // Check for nonzero length and that label starts with letter or @ or _
             if (labelName.Length == 0) return false;
-            if (!char.IsLetter(labelName[0]) && labelName[0] != '@')
+            if (!char.IsLetter(labelName[0]) && labelName[0] != '@' && labelName[0] != '_')
                 return false;
 
             for (int i = 1; i < labelName.Length; i++) { // i = 1 because we've already checked zero
@@ -569,14 +561,53 @@ namespace snarfblasm
                 string fullName = mostRecentNamedLabel + "." + labelName.ToString(); // example: SomeFunction.LoopTop
                 assembly.Labels.Add(new Label(fullName, iParsedLine, iSourceLine, true));
             } else { // Normal label
-                var sLabelName = labelName.ToString();
+                var iNamespaceSymbol = labelName.IndexOf("::");
+                string sLabelName;
+                string nmspace = null;
+
+                if (iNamespaceSymbol > 0) {
+                    sLabelName = labelName.Substring(0, iNamespaceSymbol).ToString();
+                    nmspace = labelName.Substring(iNamespaceSymbol + 2).ToString();
+                } else if (iNamespaceSymbol == -1) {
+                    sLabelName = labelName.ToString();
+                } else {
+                    return false;
+                }
+
                 mostRecentNamedLabel = sLabelName;
-                assembly.Labels.Add(new Label(sLabelName, iParsedLine, iSourceLine, false));
+                assembly.Labels.Add(new Label(sLabelName, nmspace, iParsedLine, iSourceLine, false));
             }
-            line = line.Substring(iColon + 1).TrimLeft();
+            line = lineCopy; //line.Substring(iColon + 1).TrimLeft();
 
             return true;
         }
+
+        /// <summary>Gets the label that begins at position 0 within the specified string, and updates the string to remove the parsed label name.</summary>
+        /// <param name="line">String to parse. Will be modified to remove the parsed label name.</param>
+        /// <returns>A string containing a label, or an empty string.</returns>
+        /// <remarks>Whitespace preceeding the label name will be cropped out.</remarks>
+        private StringSection GrabLabelName(ref StringSection line) {
+            var iColon = line.IndexOf(':');
+
+            if (iColon == -1) return StringSection.Empty;
+            if ((line.Length - 1 > iColon) && (line[iColon + 1] == '=')) {
+                // := is not a label
+                return StringSection.Empty;
+            }
+
+            if (line.Length > iColon + 1) {
+                if (line[iColon + 1] == ':') { // '::' is a namespace operator
+                    var restOfLine = line.Substring(iColon + 2);
+                    var iColon2 = restOfLine.IndexOf(':');
+                    if (iColon2 >= 0) iColon = iColon2 + iColon + 2;
+                }
+            }
+
+            var result = line.Substring(0, iColon).Trim();
+            line = line.Substring(iColon);
+            return result;
+        }
+
         private static void StripComments(ref StringSection line) {
             int iComment = line.IndexOf(';');
             if (iComment >= 0)

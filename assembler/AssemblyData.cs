@@ -115,8 +115,18 @@ namespace snarfblasm
             this.SourceLine = sourceLine;
             this.address = 0;
             this.local = local;
+            this.nspace = null;
+        }
+        public Label(string name, string @namespace, int location, int sourceLine, bool local) {
+            this.name = name;
+            this.iInstruction = location;
+            this.SourceLine = sourceLine;
+            this.address = 0;
+            this.local = local;
+            this.nspace = @namespace;
         }
         public readonly string name;
+        public readonly string nspace;
         public readonly int iInstruction;
         public readonly int SourceLine;
         public ushort address;

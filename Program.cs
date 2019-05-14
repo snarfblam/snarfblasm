@@ -28,6 +28,8 @@ namespace snarfblasm
             //     -os  Overflow checking (signed mode)
             //     -i   Allow invalid opcodes
             //     -d   Don't require dot on directive
+            //     -dbg Produce FCEUX debug symbol files
+
             if (args.Length == 1 && args[0].ToUpper() == "-DEBUG") {
                 args = Console.ReadLine().Split(',');
             }
@@ -354,6 +356,17 @@ namespace snarfblasm
                         error = true;
                     }
                     break;
+                case "DBG":
+                    if (switches.DebugOutput == null) {
+                        if (switchValue == null)
+                            switches.DebugOutput = OnOffSwitch.ON;
+                        else
+                            switches.DebugOutput = ParseOnOff(switchName, switchValue, out error);
+                    } else {
+                        ShowDuplicateSwitchError(switchName);
+                        error = true;
+                    }
+                    break;
                 default:
                     Console.WriteLine("Invalid switch: " + arg);
                     Console.WriteLine();
@@ -497,6 +510,8 @@ namespace snarfblasm
             Invalid opcodes are allowed (ON)
         -IPS[:OFF/ON]
             Output IPS format (ON)
+        -DBG[:OFF/ON]
+            Produce FCEUX symbol files
 
     Example: snarfblasm source.asm -CHECKING:ON -ASM6 -IPS:OFF
 ";
@@ -638,6 +653,7 @@ namespace snarfblasm
         public OnOffSwitch? Asm6Mode;
         public OnOffSwitch? InvalidOpsAllowed;
         public OnOffSwitch? IpsOutput;
+        public OnOffSwitch? DebugOutput;
 
     }
 
