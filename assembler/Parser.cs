@@ -773,39 +773,6 @@ namespace snarfblasm
                 return Opcode.addressing.indirect;
             }
 
-            ////// ,x ,y () all require at least 3 chars
-            ////if (opLen > 2) {
-            ////    bool isIndexed = operand[operand.Length - 2] == ',';
-
-            ////    char indexRegister = Char.ToUpper(operand[opLen - 1]);
-            ////    if (isIndexed) {
-            ////        if (indexRegister == 'X') {
-            ////            operand = operand.Substring(0, opLen - 2);
-            ////            return Opcode.addressing.absoluteIndexedX;
-            ////        } else if (indexRegister == 'Y') {
-            ////            bool isIndirect = operand[0] == '(' && operand.Length > 3 && operand[opLen - 3] == ')';
-            ////            if (isIndirect) {
-            ////                operand = operand.Substring(1, opLen - 4);
-            ////                return Opcode.addressing.indirectY;
-            ////            } else {
-            ////                operand = operand.Substring(0, opLen - 2);
-            ////                return Opcode.addressing.absoluteIndexedY;
-            ////            }
-            ////        }
-            ////    }
-
-            ////    bool is_Indirect = operand[0] == '(' && operand[opLen - 1] == ')';
-            ////    if (is_Indirect) {
-            ////        bool isXIndexed = opLen > 4 && operand[opLen - 3] == ',' && char.ToUpper(operand[opLen - 2]) == 'X';
-            ////        if (isXIndexed) {
-            ////            operand = operand.Substring(1, opLen - 4);
-            ////            return Opcode.addressing.indirectX;
-
-            ////        } else {
-            ////            operand = operand.Substring(1, opLen - 2);
-            ////            return Opcode.addressing.indirect;
-            ////        }
-            ////    }
 
             ////}
 
@@ -835,14 +802,19 @@ namespace snarfblasm
     /// </summary>
     interface IValueNamespace
     {
+        string CurrentNamespace { get; set; }
+
         int GetForwardLabel(int labelLevel, int iSourceLine);
         int GetBackwardLabel(int labelLevel, int iSourceLine);
         int GetForwardBrace(int labelLevel, int iSourceLine);
         int GetBackwardBrace(int labelLevel, int iSourceLine);
 
         void SetValue(StringSection name, LiteralValue value, bool isFixed, out Error error);
+        void SetValue(StringSection name, StringSection nspace, LiteralValue value, bool isFixed, out Error error);
         LiteralValue GetValue(StringSection name);
+        LiteralValue GetValue(StringSection name, StringSection nspace);
         bool TryGetValue(StringSection name, out LiteralValue result);
+        bool TryGetValue(StringSection name, StringSection nspace, out LiteralValue result);
     }
 
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Romulus;
 
 namespace snarfblasm
 {
@@ -19,6 +20,7 @@ namespace snarfblasm
             Directives = new List<Directive>();
         }
 
+        public string CurrentNamespace { get; set; }
 
         // Todo: consider making read only (modifications can be done via methods)
         public IList<ParsedInstruction> ParsedInstructions { get; private set; }
@@ -55,8 +57,11 @@ namespace snarfblasm
         public int GetBackwardBrace(int labelLevel, int iSourceLine) {
             return AnonymousLabels.FindBrace_Back(labelLevel, iSourceLine);
         }
+        public void SetValue(StringSection name, LiteralValue value, bool isFixed, out Error error) {
+            SetValue(name, StringSection.Empty, value, isFixed, out error);
+        }
 
-        public void SetValue(Romulus.StringSection name, LiteralValue value, bool isFixed, out Error error) {
+        public void SetValue(StringSection name, StringSection nSpace, LiteralValue value, bool isFixed, out Error error) {
             error = Error.None;
 
             if (assembler.CurrentPass == null)
@@ -66,6 +71,11 @@ namespace snarfblasm
             if (isDollar) {
                 assembler.CurrentPass.SetAddress(value.Value);
             }
+
+            // --------------------------------------------------------------------------------------
+            // Todo: A top-to-bottom approach doesn't seem to be working here. Better to work bottom up,
+            // introducing breaking interface changes so that any references to modified code are detected.
+            // --------------------------------------------------------------------------------------
 
             string nameString = name.ToString();
             //assembler.CurrentPass.Values.Remove(nameString);
@@ -80,6 +90,9 @@ namespace snarfblasm
         }
 
         public LiteralValue GetValue(Romulus.StringSection name) {
+            return GetValue(name, StringSection.Empty);
+        }
+        public LiteralValue GetValue(StringSection name, StringSection nspace) {
             bool isDollar = Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 return new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress,false );
@@ -91,8 +104,10 @@ namespace snarfblasm
             }
             return result.Value;
         }
-
         public bool TryGetValue(Romulus.StringSection name, out LiteralValue result) {
+            return TryGetValue(name, StringSection.Empty, out result);
+        }
+        public bool TryGetValue(StringSection name, StringSection nSpace, out LiteralValue result) {
             bool isDollar = Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 result = new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress, false);

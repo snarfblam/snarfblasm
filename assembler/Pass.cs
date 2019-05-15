@@ -601,6 +601,8 @@ namespace snarfblasm
                 return found ? (LiteralValue?)result.value : null;
             }
 
+            // Todo: A top-to-bottom approach doesn't seem to be working here. Better to work bottom up,
+            // introducing breaking interface changes so that any references to modified code are detected.
             public void SetValue(string name, LiteralValue value, bool isFixed, out bool valueIsFixedError) {
                 PassValue existingValue;
                 bool exists = Values.TryGetValue(name,out existingValue);
