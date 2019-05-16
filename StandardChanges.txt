@@ -1,0 +1,68 @@
+﻿This document describes changes to the "standard" the software attempts to
+implement for version 1.2. It describes how new features interact with 
+pre-existing features and/or options, as well as how new features work
+in general.
+
+Namespacing:
+    Default namespace (Referred to as such for internal technical reasons)
+        - The default namespace is the default namespace with no name
+        - This is the default namespace. Any and all identifiers in code that
+          could be assembled with previous versions of snarfblasm would fall
+          into this namespace.
+        - This is NOT a global namespace. There is no global namespace.
+    Identifiers can come in two forms:
+        - Simple form: just a name, consisting of alphanumeric character and underscores
+        - Qualified form: a namespace followed by the "::" symbol, followed by the simple form
+            - Identifiers belonging to the default namespace can be qualified as "::identifier".
+    Explicit Namespacing (declarations)
+        - Label and variable declarations that include a namespace specifier are
+          said to be explicitly namespaced. E.g. "registers::ppu_control := $2000"
+    Implicit Namespacing (declarations)
+        - Label and variable declarations that do not include a namespace specifier
+          are assigned to the "current" namespace
+            - The current namespace is the namespace most recently selected via a
+              .NAMESPACE directive or any other means of selecting a namespace
+    Identifier Matching
+        - Qualified identifiers must match both a namespace and an identifier declared
+          within that namespace
+        - Simple identifiers can match any of the following, with the given precedence:
+            1. Matching identifier in the current namespace
+            2. Matching identifier in the default namespace
+            3. Matching identifier in an imported namespace
+            - In other words, default namespace shadows imported namespaces and the current
+              namespace shadows the default namespace. The default namespace shadows imported
+              namespaces so that behavior is consistent when the current namespace is the 
+              default namespace, where (default shadows imported shadows default) could be
+              perceived as ambiguous or unintuitive
+    Importing Namespaces
+        - A directive will most likely be implemented: .IMPORT
+            - E.g. .IMPORT registers
+                   LDA ppu_control          ; resolves to registers::ppu_control
+    Optional Colons
+        - Explicitly namespaced labels are not supported with ASM6 style syntax
+        (e.g. "somelabel    LDA #$00" is valid but not "some::label    LDA #$00")
+    Local labels
+        - Local labels (those beginning with an "@" symbol) may not be namespaced.
+            - These, in a manner, are placed in a nested namespace belonging to the
+              non-local label to which the local label belongs
+
+
+Random syntax ideas--Ignore these, they're pure silliness
+    Array-style notation:
+        - Indexed
+            LDA ppu_buffer[y]       ; Array-style notation
+            LDA ppu_buffer,y        ; Traditional
+        - Indexed, Precalculated
+            LDA ppu_buffer[y + 1]   ; Okay, this syntax works nice here
+            LDA ppu_buffer + 1,Y    ; Traditional
+        - Indirect
+            LDA data_ptr[]          ; Reminiscient of C-style array notation on a pointer
+            LDA [data_ptr]          ; NESASM style
+            LDA (data_ptr)          ; Traditional
+        - Indirect, post-indexed
+            LDA data_ptr[y]         ; C-style array notation on a pointer--would likely require a special declaration (or it would read as simply indexed)
+            LDA [data_ptr][y]       ; NESASM/Array-style combination
+            LDA (data_ptr)[y]       ; Traditional indirect notation with array-style indexing
+            LDA [data_ptr + y]      ; This seems hard to parse and prone to syntax issues
+        - Indirect, pre-indexed
+            LDA data_ptr[x][]       ; I don't even...

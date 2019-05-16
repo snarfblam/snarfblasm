@@ -16,7 +16,7 @@ namespace snarfblasm
             this.assembler = asm;
 
             ParsedInstructions = new List<ParsedInstruction>();
-            Labels = new List<Label>();
+            Labels = new List<NamespacedLabel>();
             Directives = new List<Directive>();
         }
 
@@ -24,7 +24,7 @@ namespace snarfblasm
 
         // Todo: consider making read only (modifications can be done via methods)
         public IList<ParsedInstruction> ParsedInstructions { get; private set; }
-        public IList<Label> Labels { get; private set; }
+        public IList<NamespacedLabel> Labels { get; private set; }
         public IList<Directive> Directives { get; private set; }
 
         // Todo: move to assembly class, make private, add helper methods
@@ -37,7 +37,7 @@ namespace snarfblasm
         /// <param name="iInstruction"></param>
         /// <param name="iSourceLine"></param>
         internal void TagAnonLabel(int iInstruction, int iSourceLine) {
-            Labels.Add(new Label("~" + anonLabelIndex.ToString(), iInstruction, iSourceLine,false));
+            Labels.Add(new NamespacedLabel("~" + anonLabelIndex.ToString(), null, iInstruction, iSourceLine, false));
             anonLabelIndex++;
         }
 
@@ -122,17 +122,17 @@ namespace snarfblasm
         #endregion
     }
 
-    struct Label
+    struct NamespacedLabel
     {
-        public Label(string name, int location, int sourceLine, bool local) {
-            this.name = name;
-            this.iInstruction = location;
-            this.SourceLine = sourceLine;
-            this.address = 0;
-            this.local = local;
-            this.nspace = null;
-        }
-        public Label(string name, string @namespace, int location, int sourceLine, bool local) {
+        //public NamespacedLabel(string name, int location, int sourceLine, bool local) {
+        //    this.name = name;
+        //    this.iInstruction = location;
+        //    this.SourceLine = sourceLine;
+        //    this.address = 0;
+        //    this.local = local;
+        //    this.nspace = null;
+        //}
+        public NamespacedLabel(string name, string @namespace, int location, int sourceLine, bool local) {
             this.name = name;
             this.iInstruction = location;
             this.SourceLine = sourceLine;

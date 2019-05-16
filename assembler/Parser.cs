@@ -17,6 +17,7 @@ namespace snarfblasm
             this.Assembler = assembler;
         }
 
+        // Todo: this needs to be namespaced
         string mostRecentNamedLabel = "_nolabel_";
 
 
@@ -88,9 +89,9 @@ namespace snarfblasm
 
             bool loopLabel;
             do { // This loop allows us to parse alternating named and anonymous labels (* label: +++ -- anotherLabel:)
-                loopLabel = false;
-                loopLabel |= ParseNamedLabels(ref line, newInstructionIndex, iSourceLine);
-                loopLabel |= ParseAnonymousLabel(ref line, newInstructionIndex, iSourceLine);
+                loopLabel = false
+                    | ParseNamedLabels(ref line, newInstructionIndex, iSourceLine)
+                    | ParseAnonymousLabel(ref line, newInstructionIndex, iSourceLine);
             } while (loopLabel);
 
             if (line.IsNullOrEmpty || line[0] == ';') {
@@ -139,13 +140,21 @@ namespace snarfblasm
                     }
                 } else {
                     // Todo: ensure 'symbol' is a valid label name
+                    var labelName = GrabLabelName(ref symbol, false);
+
                     if (!Assembler.RequireColonOnLabels && !parsedUncolonedLabel && symbol.Length > 0) {
                         if (symbol[0] == '@') {
-                            string labelName = mostRecentNamedLabel + "." + symbol.Substring(1).ToString();
-                            assembly.Labels.Add(new Label(labelName, newInstructionIndex, iSourceLine, true));
+                            if (!labelName.nspace.IsNullOrEmpty) {
+                            } else {
+                                // Todo: local labels may be implicitly namespaced in that they belong to a namespaced label
+                                string fullName = mostRecentNamedLabel + "." + labelName.name.Substring(1).ToString();
+                                assembly.Labels.Add(new NamespacedLabel(fullName, null, newInstructionIndex, iSourceLine, true));
+                            }
                         } else {
+                            // Todo: AGAIN, this will need to be a namespaced label
                             mostRecentNamedLabel = symbol.ToString();
-                            assembly.Labels.Add(new Label(symbol.ToString(), newInstructionIndex, iSourceLine, false));
+                            var nspace = labelName.nspace.IsNullOrEmpty ? null : labelName.nspace.ToString();
+                            assembly.Labels.Add(new NamespacedLabel(labelName.name.ToString(), nspace, newInstructionIndex, iSourceLine, false));
                         }
                         parsedUncolonedLabel = true;
                         loopAgain = true;
@@ -156,6 +165,8 @@ namespace snarfblasm
                 }
             } while (parsedUncolonedLabel && loopAgain);
         }
+
+
 
         private int NextInstructionIndex { get { return assembly.ParsedInstructions.Count; } }
         private void ParseAssignment(StringSection symbolName, bool isLabel, StringSection expression, int iSourceLine) {
@@ -308,24 +319,29 @@ namespace snarfblasm
             }
         }
         /// <summary>
-        /// Returns a symbol name, or a zero-length string of no symbol was found.
+        /// Returns a symbol name (identifier or '$' character), or a zero-length string if no symbol was found.
         /// </summary>
         /// <param name="exp"></param>
         /// <returns></returns>
+        /// <remarks>This function will parse "namespace::identifier" as a single symbol. </remarks>
         private StringSection GetSymbol(StringSection exp) {
             // Check for special '$' variable
             if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
+                // Todo: how can the char be a letter or digit if its '$'?
                 return "$";
             }
 
             if (exp.Length == 0) return StringSection.Empty;
-            if (!char.IsLetter(exp[0]) && exp[0] != '@') return StringSection.Empty;
+            if (!char.IsLetter(exp[0]) && exp[0] != '@' && exp[0] != '_') return StringSection.Empty;
 
             int i = 1;
             while (i < exp.Length) {
                 char c = exp[i];
                 if (char.IsLetter(c) | char.IsDigit(c) | c == '_') {
                     i++;
+                } else if(c == ':' && (i + 1 <exp.Length) && exp[i+1] == ':' ) {
+                    // :: <- namespace char
+                    i += 2;
                 } else {
                     var result = exp.Substring(0, i);
                     return result;
@@ -542,40 +558,29 @@ namespace snarfblasm
         }
 
         private bool ParseNamedLabels(ref StringSection line, int iParsedLine, int iSourceLine) {
-            var lineCopy = line;
-            var labelName = GrabLabelName(ref lineCopy);
-            if (labelName.IsNullOrEmpty) return false;
+            var lineCopy = line; // Don't want to mutate line if we don't actually do anything
+            var labelName = GrabLabelName(ref lineCopy, true);
+            if (labelName.IsEmpty) return false;
 
             // Check for nonzero length and that label starts with letter or @ or _
-            if (labelName.Length == 0) return false;
-            if (!char.IsLetter(labelName[0]) && labelName[0] != '@' && labelName[0] != '_')
+            var simpleName = labelName.name;
+            if (simpleName.Length == 0) return false;
+            if (!char.IsLetter(simpleName[0]) && simpleName[0] != '@' && simpleName[0] != '_')
                 return false;
+            // Namespaced labels can't be local
+            if (simpleName[0] == '@' && !labelName.nspace.IsNullOrEmpty) return false; // Todo: produce a useful error instead of ignoring invalid syntax
 
-            for (int i = 1; i < labelName.Length; i++) { // i = 1 because we've already checked zero
-                if (!char.IsLetter(labelName[i]) && !char.IsDigit(labelName[i]) && labelName[i] != '_')
+            for (int i = 1; i < simpleName.Length; i++) { // i = 1 because we've already checked zero
+                if (!char.IsLetter(simpleName[i]) && !char.IsDigit(simpleName[i]) && simpleName[i] != '_')
                     return false;
             }
 
-            if (labelName[0] == '@') { // Local label
-                labelName = labelName.Substring(1); // Remove @
-                string fullName = mostRecentNamedLabel + "." + labelName.ToString(); // example: SomeFunction.LoopTop
-                assembly.Labels.Add(new Label(fullName, iParsedLine, iSourceLine, true));
+            if (simpleName[0] == '@') { // Local label
+                simpleName = simpleName.Substring(1); // Remove @
+                string fullName = mostRecentNamedLabel + "." + simpleName.ToString(); // example: SomeFunction.LoopTop
+                assembly.Labels.Add(new NamespacedLabel(fullName, null, iParsedLine, iSourceLine, true));
             } else { // Normal label
-                var iNamespaceSymbol = labelName.IndexOf("::");
-                string sLabelName;
-                string nmspace = null;
-
-                if (iNamespaceSymbol > 0) {
-                    sLabelName = labelName.Substring(0, iNamespaceSymbol).ToString();
-                    nmspace = labelName.Substring(iNamespaceSymbol + 2).ToString();
-                } else if (iNamespaceSymbol == -1) {
-                    sLabelName = labelName.ToString();
-                } else {
-                    return false;
-                }
-
-                mostRecentNamedLabel = sLabelName;
-                assembly.Labels.Add(new Label(sLabelName, nmspace, iParsedLine, iSourceLine, false));
+                assembly.Labels.Add(new NamespacedLabel(labelName.name.ToString(), labelName.nspace.ToString(), iParsedLine, iSourceLine, false));
             }
             line = lineCopy; //line.Substring(iColon + 1).TrimLeft();
 
@@ -584,28 +589,52 @@ namespace snarfblasm
 
         /// <summary>Gets the label that begins at position 0 within the specified string, and updates the string to remove the parsed label name.</summary>
         /// <param name="line">String to parse. Will be modified to remove the parsed label name.</param>
+        /// <param name="checkForAssign">If true, the presence of a := symbol following a name will cause the name to NOT be parsed</param>
         /// <returns>A string containing a label, or an empty string.</returns>
         /// <remarks>Whitespace preceeding the label name will be cropped out.</remarks>
-        private StringSection GrabLabelName(ref StringSection line) {
+        private labelName GrabLabelName(ref StringSection line, bool checkForAssign) {
             var iColon = line.IndexOf(':');
 
-            if (iColon == -1) return StringSection.Empty;
-            if ((line.Length - 1 > iColon) && (line[iColon + 1] == '=')) {
-                // := is not a label
-                return StringSection.Empty;
+            if (iColon == -1) return labelName.Empty;
+            if (checkForAssign && (line.Length - 1 > iColon) && (line[iColon + 1] == '=')) {
+                return labelName.Empty; // "x := y" is not a label
             }
 
+            // Namespace::label
             if (line.Length > iColon + 1) {
                 if (line[iColon + 1] == ':') { // '::' is a namespace operator
+                    var nspace = line.Substring(iColon).Trim();
                     var restOfLine = line.Substring(iColon + 2);
                     var iColon2 = restOfLine.IndexOf(':');
-                    if (iColon2 >= 0) iColon = iColon2 + iColon + 2;
+                    if (iColon2 >= 0) {
+                        if (checkForAssign && restOfLine.Length - 1 > iColon2 && restOfLine[iColon2 + 1] == '=') {
+                            return labelName.Empty; // "n::x := y" is not a label
+                        }
+
+                        var label = restOfLine.Substring(iColon2).Trim();
+                        line = restOfLine.Substring(iColon2 + 1);
+                        return new labelName(nspace, label);
+                    } else {
+                        return labelName.Empty;
+                    }
                 }
             }
 
             var result = line.Substring(0, iColon).Trim();
             line = line.Substring(iColon);
-            return result;
+            return new labelName(StringSection.Empty, result);
+        }
+
+        private struct labelName
+        {
+            public labelName(StringSection nspace, StringSection name) {
+                this.nspace = nspace;
+                this.name = name;
+            }
+            public StringSection nspace;
+            public StringSection name;
+            public bool IsEmpty { get { return name.IsNullOrEmpty; } }
+            public static readonly labelName Empty;
         }
 
         private static void StripComments(ref StringSection line) {
