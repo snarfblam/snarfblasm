@@ -17,7 +17,7 @@ namespace snarfblasm
             this.Assembler = assembler;
         }
 
-        NamespacedLabelName mostRecentNamedLabel = new NamespacedLabelName("_nolabel_", null);
+        Identifier mostRecentNamedLabel = new Identifier("_nolabel_", null);
 
 
         // Todo: Move TryToConvertToZeroPage and FindOpcode to another class, probably assembler. 
@@ -146,7 +146,7 @@ namespace snarfblasm
 
                     if (!Assembler.RequireColonOnLabels && !parsedUncolonedLabel && symbolName.Length > 0) {
                         if (symbol.IsSimple && symbolName[0] == '@') {
-                            var fullName = new NamespacedLabelName(mostRecentNamedLabel.name + "." + symbol.name, mostRecentNamedLabel.nspace);
+                            var fullName = new Identifier(mostRecentNamedLabel.name + "." + symbol.name, mostRecentNamedLabel.nspace);
                             assembly.Labels.Add(new NamespacedLabel(fullName, newInstructionIndex, iSourceLine, true));
                         } else {
                             // Todo: something feels off here. Shouldn't the label be placed in the current namespace? But that's not evaluated until the actual assembly step...
@@ -167,7 +167,7 @@ namespace snarfblasm
 
 
         private int NextInstructionIndex { get { return assembly.ParsedInstructions.Count; } }
-        private void ParseAssignment(NamespacedLabelName symbolName, bool isLabel, StringSection expression, int iSourceLine) {
+        private void ParseAssignment(Identifier symbolName, bool isLabel, StringSection expression, int iSourceLine) {
             // Call site SHOULD check for this condition and specify an Error.
             if (expression.Length == 0) throw new SyntaxErrorException("Expected: expression.", iSourceLine);
 
@@ -321,7 +321,7 @@ namespace snarfblasm
         /// <param name="exp"></param>
         /// <returns></returns>
         /// <remarks>This function will parse "namespace::identifier" as a single symbol. </remarks>
-        private NamespacedLabelName GetSymbol(StringSection exp) {
+        private Identifier GetSymbol(StringSection exp) {
             //// Check for special '$' variable
             //if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
             //    // Todo: how can the char be a letter or digit if its '$'?
@@ -377,7 +377,7 @@ namespace snarfblasm
             return temp;
         }
 
-        private bool ParseDirective(NamespacedLabelName directiveName, StringSection line, int sourceLine, out Error error) {
+        private bool ParseDirective(Identifier directiveName, StringSection line, int sourceLine, out Error error) {
             if (!directiveName.IsSimple) {
                 error = new Error(ErrorCode.Directive_Not_Defined, string.Format(Error.Msg_DirectiveUndefined_name, directiveName.ToString()), sourceLine);
                 return false;
@@ -627,12 +627,12 @@ namespace snarfblasm
         /// <param name="checkForAssign">If true, the presence of a := symbol following a name will cause the name to NOT be parsed</param>
         /// <returns>A string containing a label, or an empty string.</returns>
         /// <remarks>Whitespace preceeding the label name will be cropped out.</remarks>
-        private NamespacedLabelName GrabLabelName(ref StringSection line, bool checkForAssign) {
+        private Identifier GrabLabelName(ref StringSection line, bool checkForAssign) {
             var iColon = line.IndexOf(':');
 
-            if (iColon == -1) return NamespacedLabelName.Empty;
+            if (iColon == -1) return Identifier.Empty;
             if (checkForAssign && (line.Length - 1 > iColon) && (line[iColon + 1] == '=')) {
-                return NamespacedLabelName.Empty; // "x := y" is not a label
+                return Identifier.Empty; // "x := y" is not a label
             }
 
             // Namespace::label
@@ -643,21 +643,21 @@ namespace snarfblasm
                     var iColon2 = restOfLine.IndexOf(':');
                     if (iColon2 >= 0) {
                         if (checkForAssign && restOfLine.Length - 1 > iColon2 && restOfLine[iColon2 + 1] == '=') {
-                            return NamespacedLabelName.Empty; // "n::x := y" is not a label
+                            return Identifier.Empty; // "n::x := y" is not a label
                         }
 
                         var label = restOfLine.Substring(iColon2).Trim();
                         line = restOfLine.Substring(iColon2 + 1);
-                        return new NamespacedLabelName(label.ToString(), nspace.ToString());
+                        return new Identifier(label.ToString(), nspace.ToString());
                     } else {
-                        return NamespacedLabelName.Empty;
+                        return Identifier.Empty;
                     }
                 }
             }
 
             var result = line.Substring(0, iColon).Trim();
             line = line.Substring(iColon);
-            return new NamespacedLabelName(result.ToString(), null);
+            return new Identifier(result.ToString(), null);
         }
 
         //private struct labelName
@@ -873,13 +873,13 @@ namespace snarfblasm
         int GetForwardBrace(int labelLevel, int iSourceLine);
         int GetBackwardBrace(int labelLevel, int iSourceLine);
 
-        void SetValue(NamespacedLabelName name, LiteralValue value, bool isFixed, out Error error);
+        void SetValue(Identifier name, LiteralValue value, bool isFixed, out Error error);
         //void SetValue(StringSection name, StringSection nspace, LiteralValue value, bool isFixed, out Error error);
-        LiteralValue GetValue(NamespacedLabelName name);
+        LiteralValue GetValue(Identifier name);
         //LiteralValue GetValue(StringSection name, StringSection nspace);
         //bool TryGetValue(StringSection name, out LiteralValue result);
         //bool TryGetValue(StringSection name, StringSection nspace, out LiteralValue result);
-        bool TryGetValue(NamespacedLabelName name, out LiteralValue result);
+        bool TryGetValue(Identifier name, out LiteralValue result);
     }
 
 }

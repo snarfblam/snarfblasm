@@ -22,7 +22,7 @@ namespace snarfblasm
         public NameGetter MostRecentNamedLabelGetter { get; set; } // Used to evaluate local labels (e.g. @looptop)
         
         public delegate string StringGetter();
-        public delegate NamespacedLabelName NameGetter();
+        public delegate Identifier NameGetter();
 
         /// <summary>
         /// If true, an error will occur when undefined symbols are referenced. If false, all undefined values will return a 16-bit value of zero.
@@ -404,7 +404,7 @@ namespace snarfblasm
 
         LiteralValue ParseUnary(ref StringSection exp, out Error error) {
             LiteralValue RValue;
-            NamespacedLabelName LValue;
+            Identifier LValue;
 
             // Find pre-operators (e.g. ~value, !value, <value, ++value)
             bool search_PreOperator = true;
@@ -440,7 +440,7 @@ namespace snarfblasm
                 LiteralValue result = PerformUnaryPostOperation(operationIndex, LValue, RValue, out error);
 
                 // As of yet, all operators produce R-Values
-                LValue = NamespacedLabelName.Empty;
+                LValue = Identifier.Empty;
 
                 if (error.Code != ErrorCode.None) 
                     return default(LiteralValue);
@@ -462,16 +462,16 @@ namespace snarfblasm
 
 
         /// <summary>Returns the result of the operation, and performs any side-effects.</summary>
-        private LiteralValue PerformUnaryPostOperation(int operationIndex, NamespacedLabelName LValue, LiteralValue RValue, out Error error) {
+        private LiteralValue PerformUnaryPostOperation(int operationIndex, Identifier LValue, LiteralValue RValue, out Error error) {
             return PerformUnaryOperation_Internal(operationIndex, LValue, RValue, out error, UnaryExpressionOperator.PostOperators);
         }
         /// <summary>Returns the result of the operation, and performs any side-effects.</summary>
-        private LiteralValue PerformUnaryPreOperation(int operationIndex, NamespacedLabelName LValue, LiteralValue RValue, out Error error) {
+        private LiteralValue PerformUnaryPreOperation(int operationIndex, Identifier LValue, LiteralValue RValue, out Error error) {
             return PerformUnaryOperation_Internal(operationIndex, LValue, RValue, out error, UnaryExpressionOperator.PreOperators);
         }
 
         /// <summary>Returns the result of the operation, and performs any side-effects. A valid R-value must be specified, even if a corresponding L-value is specified.</summary>
-        private LiteralValue PerformUnaryOperation_Internal(int operationIndex, NamespacedLabelName LValue, LiteralValue RValue, out Error error, UnaryExpressionOperator[] operatorList) {
+        private LiteralValue PerformUnaryOperation_Internal(int operationIndex, Identifier LValue, LiteralValue RValue, out Error error, UnaryExpressionOperator[] operatorList) {
             var operation = operatorList[operationIndex];
 
             int operandValue = GetIntegerValue(RValue, operation.Signed);
@@ -552,9 +552,9 @@ namespace snarfblasm
         }
 
 
-        private void GetValue(ref StringSection exp, out NamespacedLabelName LValue, out LiteralValue RValue, out Error error) {
+        private void GetValue(ref StringSection exp, out Identifier LValue, out LiteralValue RValue, out Error error) {
             error = Error.None;
-            LValue = NamespacedLabelName.Empty;
+            LValue = Identifier.Empty;
             if (exp.IsNullOrEmpty) {
                 error = new Error(ErrorCode.End_Of_Text, Error.Msg_ExpectedValue);
                 RValue = default(LiteralValue);
@@ -574,8 +574,8 @@ namespace snarfblasm
                 StringSection hexString = GetHexString(exp);
                 if (hexString.Length == 0) { // If the $ is not followed by a valid hex number, we'll assume it is the $ variable
                     exp = exp.TrimLeft();
-                    LValue = NamespacedLabelName.CurrentInstruction;
-                    RValue = ValueNamespace.GetValue(NamespacedLabelName.CurrentInstruction);
+                    LValue = Identifier.CurrentInstruction;
+                    RValue = ValueNamespace.GetValue(Identifier.CurrentInstruction);
                     return;
                 }
                 exp = exp.Substring(hexString.Length).TrimLeft(); // Remove number
@@ -600,8 +600,8 @@ namespace snarfblasm
                 if (exp.Length >= 2 && char.IsLetter(exp[1])) {
                     exp = exp.Substring(1);
                     var labelName = ParseSymbol(ref exp);
-                    NamespacedLabelName recent = MostRecentNamedLabelGetter();
-                    labelName = new NamespacedLabelName(recent.name + "." + labelName, recent.nspace); // Todo: this is gonna need to be a namespaced label (getter)
+                    Identifier recent = MostRecentNamedLabelGetter();
+                    labelName = new Identifier(recent.name + "." + labelName, recent.nspace); // Todo: this is gonna need to be a namespaced label (getter)
 
                     // Get label value
                     var rVal = GetSymbolValue(labelName);
@@ -621,7 +621,7 @@ namespace snarfblasm
                     return;
                 }
             } else if (char.IsLetter(exp[0])) {
-                NamespacedLabelName varName = ParseSymbol(ref exp);
+                Identifier varName = ParseSymbol(ref exp);
                 if (!varName.IsEmpty) {
                     var rVal = GetSymbolValue(varName);
                     if (rVal == null) {
@@ -794,11 +794,11 @@ namespace snarfblasm
         }
 
 
-        private void SetSymbolValue(NamespacedLabelName name, LiteralValue value, out Error error) {
+        private void SetSymbolValue(Identifier name, LiteralValue value, out Error error) {
             ValueNamespace.SetValue(name, value,false, out error);
         }
 
-        private LiteralValue? GetSymbolValue(NamespacedLabelName name) {
+        private LiteralValue? GetSymbolValue(Identifier name) {
             LiteralValue result;
             if (ValueNamespace.TryGetValue(name, out result)) {
                 return result;
@@ -817,9 +817,9 @@ namespace snarfblasm
         /// </summary>
         /// <param name="exp"></param>
         /// <returns></returns>
-        private NamespacedLabelName ParseSymbol(ref StringSection exp) {
+        private Identifier ParseSymbol(ref StringSection exp) {
             if (exp.Length < 1 || !(char.IsLetter(exp[0]) && exp[0] != '_'))
-                return NamespacedLabelName.Empty;
+                return Identifier.Empty;
 
             int i = 1;
             int nameStart = 0;
@@ -838,13 +838,13 @@ namespace snarfblasm
                     } else {
                         var name = exp.Substring(nameStart, i - nameStart).ToString();
                         exp = exp.Substring(i).TrimLeft();
-                        return new NamespacedLabelName(name, nspace);
+                        return new Identifier(name, nspace);
                     }
                 }
             }
             var result = exp.Substring(nameStart, i - nameStart).ToString();
             exp = StringSection.Empty; // Entire string was a symbol
-            return new NamespacedLabelName(result, nspace);
+            return new Identifier(result, nspace);
         }
 
         public bool TryParseSimpleValue(StringSection expression, out LiteralValue value) {

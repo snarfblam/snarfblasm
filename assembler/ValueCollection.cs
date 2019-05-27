@@ -44,17 +44,17 @@ namespace snarfblasm.assembler
         }
 
         /// <summary>Returns the value that exactly matches the specified name</summary>
-        public LiteralValue this[NamespacedLabelName name] {
+        public LiteralValue this[Identifier name] {
             get {
                 return Find(name.name).GetValue(name.nspace).Value; // Throws error if value does not exist
             }
         }
 
-        public LiteralValue? TryGetValue(NamespacedLabelName name) {
+        public LiteralValue? TryGetValue(Identifier name) {
             return Find(name.name).GetValue(name.nspace);
         }
 
-        public void SetValue(NamespacedLabelName name, LiteralValue value, bool isFixed, out bool valueIsFixedError) {
+        public void SetValue(Identifier name, LiteralValue value, bool isFixed, out bool valueIsFixedError) {
             valueIsFixedError = false;
 
             PassValue oldValue = Find(name.name);
@@ -73,7 +73,7 @@ namespace snarfblasm.assembler
 
 
 
-        internal bool NameExists(NamespacedLabelName name) {
+        internal bool NameExists(Identifier name) {
             return null != TryGetValue(name);
         }
     }

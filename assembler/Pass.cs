@@ -20,7 +20,7 @@ namespace snarfblasm
             AddDefaultPatch();
 
             Bank = -1;
-            MostRecentNamedLabel = new NamespacedLabelName("!unnamed!", null);
+            MostRecentNamedLabel = new Identifier("!unnamed!", null);
 
             Assembler.Evaluator.MostRecentNamedLabelGetter = getMostRecentNamedLabel;
             //Values = new Dictionary<string, LiteralValue>(StringComparer.InvariantCultureIgnoreCase);
@@ -38,8 +38,8 @@ namespace snarfblasm
         /// </summary>
         public bool HasPatchDirective { get; private set; }
 
-        protected NamespacedLabelName MostRecentNamedLabel { get; private set; }
-        NamespacedLabelName getMostRecentNamedLabel() {
+        protected Identifier MostRecentNamedLabel { get; private set; }
+        Identifier getMostRecentNamedLabel() {
             return MostRecentNamedLabel;
         }
 
@@ -365,7 +365,7 @@ namespace snarfblasm
                 return null;
             }
 
-            return Values.NameExists(new NamespacedLabelName(directive.condition.ToString(), null));
+            return Values.NameExists(new Identifier(directive.condition.ToString(), null));
         }
 
         #endregion

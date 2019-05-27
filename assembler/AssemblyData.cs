@@ -57,13 +57,13 @@ namespace snarfblasm
         public int GetBackwardBrace(int labelLevel, int iSourceLine) {
             return AnonymousLabels.FindBrace_Back(labelLevel, iSourceLine);
         }
-        public void SetValue(NamespacedLabelName name, LiteralValue value, bool isFixed, out Error error) {
+        public void SetValue(Identifier name, LiteralValue value, bool isFixed, out Error error) {
             error = Error.None;
 
             if (assembler.CurrentPass == null)
                 throw new InvalidOperationException("Can only access variables when assembler is running a pass.");
 
-            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction);  //Romulus.StringSection.Compare(name, "$", true) == 0;
+            bool isDollar = name.Equals(Identifier.CurrentInstruction);  //Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 assembler.CurrentPass.SetAddress(value.Value);
             }
@@ -82,8 +82,8 @@ namespace snarfblasm
         //public LiteralValue GetValue(NamespacedLabelName name) {
         //    return GetValue(name, StringSection.Empty);
         //}
-        public LiteralValue GetValue(NamespacedLabelName name) {
-            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
+        public LiteralValue GetValue(Identifier name) {
+            bool isDollar = name.Equals(Identifier.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 return new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress, false);
             }
@@ -98,8 +98,8 @@ namespace snarfblasm
         //    return TryGetValue(name, StringSection.Empty, out result);
         //}
 
-        public bool TryGetValue(NamespacedLabelName name, out LiteralValue result) {
-            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
+        public bool TryGetValue(Identifier name, out LiteralValue result) {
+            bool isDollar = name.Equals(Identifier.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 result = new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress, false);
                 return true;
@@ -131,7 +131,7 @@ namespace snarfblasm
             this.local = local;
             this.nspace = @namespace;
         }
-        public NamespacedLabel(NamespacedLabelName name, int location, int sourceLine, bool local) {
+        public NamespacedLabel(Identifier name, int location, int sourceLine, bool local) {
             this.name = name.name;
             this.iInstruction = location;
             this.SourceLine = sourceLine;
@@ -140,8 +140,8 @@ namespace snarfblasm
             this.nspace = name.nspace;
         }
 
-        public NamespacedLabelName GetName() {
-            return new NamespacedLabelName(this.name, this.nspace);
+        public Identifier GetName() {
+            return new Identifier(this.name, this.nspace);
         }
         public readonly string name;
         public readonly string nspace;
@@ -155,22 +155,22 @@ namespace snarfblasm
     /// <summary>
     /// Reference to a NamespacedLabel
     /// </summary>
-    struct NamespacedLabelName : IComparable<NamespacedLabelName>, IEquatable<NamespacedLabelName>
+    struct Identifier : IComparable<Identifier>, IEquatable<Identifier>
     {
         // Todo: consider using string sections instead of strings
 
-        public NamespacedLabelName(string name, string @namespace) {
+        public Identifier(string name, string @namespace) {
             this.name = name;
             this.nspace = @namespace;
         }
-        public NamespacedLabelName(NamespacedLabel label) {
+        public Identifier(NamespacedLabel label) {
             this.name = label.name;
             this.nspace = label.nspace;
         }
 
         // Todo: convert to constructor (currently done this way to avoid accidentally created identifiers without namespaces while code is being updated)._
-        public static NamespacedLabelName Simple(string name) {
-            return new NamespacedLabelName(name, null);
+        public static Identifier Simple(string name) {
+            return new Identifier(name, null);
         }
 
 
@@ -180,18 +180,18 @@ namespace snarfblasm
         public bool IsEmpty { get { return String.IsNullOrEmpty(this.name); } }
         /// <summary>Returns whether this name is 'simple', having no specified namespace. Returns true for empty values.</summary>
         public bool IsSimple { get { return string.IsNullOrEmpty(this.nspace); } }
-        public static readonly NamespacedLabelName Empty;
-        public static readonly NamespacedLabelName CurrentInstruction = new NamespacedLabelName("$", null);
+        public static readonly Identifier Empty;
+        public static readonly Identifier CurrentInstruction = new Identifier("$", null);
 
-        public bool Equals(NamespacedLabelName b) {
+        public bool Equals(Identifier b) {
             return ((this.nspace ?? string.Empty) == (b.nspace ?? string.Empty))
                 && ((this.name ?? string.Empty) == (b.name ?? string.Empty));
         }
 
-        public static bool operator ==(NamespacedLabelName a, NamespacedLabelName b) {
+        public static bool operator ==(Identifier a, Identifier b) {
             return a.Equals(b);
         }
-        public static bool operator !=(NamespacedLabelName a, NamespacedLabelName b) {
+        public static bool operator !=(Identifier a, Identifier b) {
             return !a.Equals(b);
         }
 
@@ -207,7 +207,7 @@ namespace snarfblasm
             return hash;
         }
 
-        public int CompareTo(NamespacedLabelName a) {
+        public int CompareTo(Identifier a) {
             var result = String.Compare(this.nspace, a.nspace);
             if (result == 0) return String.Compare(this.name, a.name);
             return result;
