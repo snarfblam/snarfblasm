@@ -9,7 +9,7 @@ namespace snarfblasm
     /// <summary>
     /// Stores data parsed from assembly code.
     /// </summary>
-    class AssemblyData:IValueNamespace
+    class AssemblyData : IValueNamespace
     {
         Assembler assembler;
         public AssemblyData(Assembler asm) {
@@ -57,64 +57,55 @@ namespace snarfblasm
         public int GetBackwardBrace(int labelLevel, int iSourceLine) {
             return AnonymousLabels.FindBrace_Back(labelLevel, iSourceLine);
         }
-        public void SetValue(StringSection name, LiteralValue value, bool isFixed, out Error error) {
-            SetValue(name, StringSection.Empty, value, isFixed, out error);
-        }
-
-        public void SetValue(StringSection name, StringSection nSpace, LiteralValue value, bool isFixed, out Error error) {
+        public void SetValue(NamespacedLabelName name, LiteralValue value, bool isFixed, out Error error) {
             error = Error.None;
 
             if (assembler.CurrentPass == null)
                 throw new InvalidOperationException("Can only access variables when assembler is running a pass.");
 
-            bool isDollar = Romulus.StringSection.Compare(name, "$", true) == 0;
+            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction);  //Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 assembler.CurrentPass.SetAddress(value.Value);
             }
 
-            // --------------------------------------------------------------------------------------
-            // Todo: A top-to-bottom approach doesn't seem to be working here. Better to work bottom up,
-            // introducing breaking interface changes so that any references to modified code are detected.
-            // --------------------------------------------------------------------------------------
 
-            string nameString = name.ToString();
-            //assembler.CurrentPass.Values.Remove(nameString);
-            //assembler.CurrentPass.Values.Add(nameString, value);
+            //string nameString = name.ToString();
             bool fixedValueError;
-            assembler.CurrentPass.Values.SetValue(nameString, value, isFixed, out fixedValueError);
+            assembler.CurrentPass.Values.SetValue(name, value, isFixed, out fixedValueError);
             if (fixedValueError) {
                 // Todo: replace this with assembler value, or return fixedValueError somehow.
                 //throw new Exception("Attempted to assign to a fixed value. This exception should be replaced with an appropriate assembler error.");
-                error = new Error(ErrorCode.Value_Already_Defined, string.Format(Error.Msg_ValueAlreadyDefined_name, nameString));
+                error = new Error(ErrorCode.Value_Already_Defined, string.Format(Error.Msg_ValueAlreadyDefined_name, name.ToString()));
             }
         }
 
-        public LiteralValue GetValue(Romulus.StringSection name) {
-            return GetValue(name, StringSection.Empty);
-        }
-        public LiteralValue GetValue(StringSection name, StringSection nspace) {
-            bool isDollar = Romulus.StringSection.Compare(name, "$", true) == 0;
+        //public LiteralValue GetValue(NamespacedLabelName name) {
+        //    return GetValue(name, StringSection.Empty);
+        //}
+        public LiteralValue GetValue(NamespacedLabelName name) {
+            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
-                return new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress,false );
+                return new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress, false);
             }
 
             LiteralValue? result;
-            if (null == (result = assembler.CurrentPass.Values.TryGetValue(name.ToString()))) {
+            if (null == (result = assembler.CurrentPass.Values.TryGetValue(name))) {
                 throw new Exception(); // Todo: Must be more specific, and handled!
             }
             return result.Value;
         }
-        public bool TryGetValue(Romulus.StringSection name, out LiteralValue result) {
-            return TryGetValue(name, StringSection.Empty, out result);
-        }
-        public bool TryGetValue(StringSection name, StringSection nSpace, out LiteralValue result) {
-            bool isDollar = Romulus.StringSection.Compare(name, "$", true) == 0;
+        //public bool TryGetValue(Romulus.StringSection name, out LiteralValue result) {
+        //    return TryGetValue(name, StringSection.Empty, out result);
+        //}
+
+        public bool TryGetValue(NamespacedLabelName name, out LiteralValue result) {
+            bool isDollar = name.Equals(NamespacedLabelName.CurrentInstruction); // Romulus.StringSection.Compare(name, "$", true) == 0;
             if (isDollar) {
                 result = new LiteralValue((ushort)assembler.CurrentPass.CurrentAddress, false);
                 return true;
             }
 
-            var value = assembler.CurrentPass.Values.TryGetValue(name.ToString());
+            var value = assembler.CurrentPass.Values.TryGetValue(name);
             result = value.HasValue ? value.Value : default(LiteralValue);
             return value.HasValue;
         }
@@ -140,12 +131,87 @@ namespace snarfblasm
             this.local = local;
             this.nspace = @namespace;
         }
+        public NamespacedLabel(NamespacedLabelName name, int location, int sourceLine, bool local) {
+            this.name = name.name;
+            this.iInstruction = location;
+            this.SourceLine = sourceLine;
+            this.address = 0;
+            this.local = local;
+            this.nspace = name.nspace;
+        }
+
+        public NamespacedLabelName GetName() {
+            return new NamespacedLabelName(this.name, this.nspace);
+        }
         public readonly string name;
         public readonly string nspace;
         public readonly int iInstruction;
         public readonly int SourceLine;
         public ushort address;
         public bool local;
+
+    }
+
+    /// <summary>
+    /// Reference to a NamespacedLabel
+    /// </summary>
+    struct NamespacedLabelName : IComparable<NamespacedLabelName>, IEquatable<NamespacedLabelName>
+    {
+        // Todo: consider using string sections instead of strings
+
+        public NamespacedLabelName(string name, string @namespace) {
+            this.name = name;
+            this.nspace = @namespace;
+        }
+        public NamespacedLabelName(NamespacedLabel label) {
+            this.name = label.name;
+            this.nspace = label.nspace;
+        }
+
+        // Todo: convert to constructor (currently done this way to avoid accidentally created identifiers without namespaces while code is being updated)._
+        public static NamespacedLabelName Simple(string name) {
+            return new NamespacedLabelName(name, null);
+        }
+
+
+        public readonly string name;
+        public readonly string nspace;
+
+        public bool IsEmpty { get { return String.IsNullOrEmpty(this.name); } }
+        /// <summary>Returns whether this name is 'simple', having no specified namespace. Returns true for empty values.</summary>
+        public bool IsSimple { get { return string.IsNullOrEmpty(this.nspace); } }
+        public static readonly NamespacedLabelName Empty;
+        public static readonly NamespacedLabelName CurrentInstruction = new NamespacedLabelName("$", null);
+
+        public bool Equals(NamespacedLabelName b) {
+            return ((this.nspace ?? string.Empty) == (b.nspace ?? string.Empty))
+                && ((this.name ?? string.Empty) == (b.name ?? string.Empty));
+        }
+
+        public static bool operator ==(NamespacedLabelName a, NamespacedLabelName b) {
+            return a.Equals(b);
+        }
+        public static bool operator !=(NamespacedLabelName a, NamespacedLabelName b) {
+            return !a.Equals(b);
+        }
+
+        public override string ToString() {
+            if (string.IsNullOrEmpty(this.nspace)) return this.name;
+
+            return this.nspace + "::" + this.name;
+        }
+        public override int GetHashCode() {
+            var hash = 0;
+            if (this.name != null) hash ^= this.name.GetHashCode();
+            if (this.nspace != null) hash ^= this.nspace.GetHashCode();
+            return hash;
+        }
+
+        public int CompareTo(NamespacedLabelName a) {
+            var result = String.Compare(this.nspace, a.nspace);
+            if (result == 0) return String.Compare(this.name, a.name);
+            return result;
+        }
 
     }
     /// <summary>

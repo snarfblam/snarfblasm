@@ -72,6 +72,7 @@
     <Compile Include="assembler\Parser.cs" />
     <Compile Include="assembler\Pass.cs" />
     <Compile Include="assembler\PreProcessor.cs" />
+    <Compile Include="assembler\ValueCollection.cs" />
     <Compile Include="BankLabels.cs" />
     <Compile Include="EventArgs.cs" />
     <Compile Include="ExtensionAttribute.cs" />
@@ -100,7 +101,7 @@
     <Content Include="README.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="StandardChanges.txt" />
+    <Content Include="On version 1.2.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

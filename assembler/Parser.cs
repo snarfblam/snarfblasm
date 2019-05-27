@@ -17,8 +17,7 @@ namespace snarfblasm
             this.Assembler = assembler;
         }
 
-        // Todo: this needs to be namespaced
-        string mostRecentNamedLabel = "_nolabel_";
+        NamespacedLabelName mostRecentNamedLabel = new NamespacedLabelName("_nolabel_", null);
 
 
         // Todo: Move TryToConvertToZeroPage and FindOpcode to another class, probably assembler. 
@@ -72,7 +71,7 @@ namespace snarfblasm
 
 
 
-        
+
         /// <summary>
         /// 
         /// </summary>
@@ -102,8 +101,9 @@ namespace snarfblasm
             // Dot-prefixed directive
             if (line[0] == '.') {
                 line = line.Substring(1);
-                var directiveName = GetSymbol(line);
-                line = line.Substring(directiveName.Length).TrimLeft();
+                var directiveName = GrabSimpleName(ref line).ToString();
+                line = line.TrimLeft();
+
                 if (!ParseDirective(directiveName, line, iSourceLine, out error)) {
                     error = new Error(ErrorCode.Directive_Not_Defined, string.Format(Error.Msg_DirectiveUndefined_name, directiveName), iSourceLine);
                     return;
@@ -116,15 +116,16 @@ namespace snarfblasm
             bool parsedUncolonedLabel = false; // Set to true when an uncoloned label is found so we don't look for one again.
             bool loopAgain = false; // Set to true when an uncoloned label is found to loop back and try to parse the remaining text
             do {
-                loopAgain = false; 
+                loopAgain = false;
 
-                var symbol = GetSymbol(line);
-                if (symbol.Length == 0) break;
-                line = line.Substring(symbol.Length).Trim();
+                var symbol = GrabLabelName(ref line, true);
+                //var symbol = GrabSimpleName(ref line);
+                if (symbol.IsEmpty) break;
+                line = line.TrimLeft();
 
                 if (ParseDirective(symbol, line, iSourceLine, out error))
                     return;
-                else if (ParseInstruction(symbol, line, iSourceLine, out error)) {
+                else if (symbol.IsSimple && ParseInstruction(symbol.name, line, iSourceLine, out error)) {
                     return;
                 } else if ((line.Length > 0 && line[0] == '=') || (line.Length > 1 && line[0] == ':' && line[1] == '=')) { // Assignments and label assignments
                     // := is a cross between a label and assignment: It declares a label with an explicit value.
@@ -140,21 +141,18 @@ namespace snarfblasm
                     }
                 } else {
                     // Todo: ensure 'symbol' is a valid label name
-                    var labelName = GrabLabelName(ref symbol, false);
+                    //var labelName = GrabLabelName(ref symbol, false);
+                    var symbolName = symbol.name ?? "";
 
-                    if (!Assembler.RequireColonOnLabels && !parsedUncolonedLabel && symbol.Length > 0) {
-                        if (symbol[0] == '@') {
-                            if (!labelName.nspace.IsNullOrEmpty) {
-                            } else {
-                                // Todo: local labels may be implicitly namespaced in that they belong to a namespaced label
-                                string fullName = mostRecentNamedLabel + "." + labelName.name.Substring(1).ToString();
-                                assembly.Labels.Add(new NamespacedLabel(fullName, null, newInstructionIndex, iSourceLine, true));
-                            }
+                    if (!Assembler.RequireColonOnLabels && !parsedUncolonedLabel && symbolName.Length > 0) {
+                        if (symbol.IsSimple && symbolName[0] == '@') {
+                            var fullName = new NamespacedLabelName(mostRecentNamedLabel.name + "." + symbol.name, mostRecentNamedLabel.nspace);
+                            assembly.Labels.Add(new NamespacedLabel(fullName, newInstructionIndex, iSourceLine, true));
                         } else {
-                            // Todo: AGAIN, this will need to be a namespaced label
-                            mostRecentNamedLabel = symbol.ToString();
-                            var nspace = labelName.nspace.IsNullOrEmpty ? null : labelName.nspace.ToString();
-                            assembly.Labels.Add(new NamespacedLabel(labelName.name.ToString(), nspace, newInstructionIndex, iSourceLine, false));
+                            // Todo: something feels off here. Shouldn't the label be placed in the current namespace? But that's not evaluated until the actual assembly step...
+                            mostRecentNamedLabel = symbol;// symbol.ToString();
+                            //var nspace = string.IsNullOrEmpty(symbol.nspace) ? null : symbol.nspace;
+                            assembly.Labels.Add(new NamespacedLabel(symbol, newInstructionIndex, iSourceLine, false));
                         }
                         parsedUncolonedLabel = true;
                         loopAgain = true;
@@ -169,7 +167,7 @@ namespace snarfblasm
 
 
         private int NextInstructionIndex { get { return assembly.ParsedInstructions.Count; } }
-        private void ParseAssignment(StringSection symbolName, bool isLabel, StringSection expression, int iSourceLine) {
+        private void ParseAssignment(NamespacedLabelName symbolName, bool isLabel, StringSection expression, int iSourceLine) {
             // Call site SHOULD check for this condition and specify an Error.
             if (expression.Length == 0) throw new SyntaxErrorException("Expected: expression.", iSourceLine);
 
@@ -188,7 +186,7 @@ namespace snarfblasm
 
         private bool ParseInstruction(StringSection instruction, StringSection operand, int iSourceLine, out Error error) {
             error = Error.None;
-            if(operand.Length > 0 && operand[0] == '@'){}
+            if (operand.Length > 0 && operand[0] == '@') { }
             var addressing = ParseAddressing(ref operand);
             int opcodeVal = FindOpcode(instruction, addressing);
 
@@ -213,14 +211,13 @@ namespace snarfblasm
 
             if (addressing != Opcode.addressing.implied) {
                 LiteralValue operandValue = new LiteralValue();
-                string operandExpression = null;
 
                 // Todo: consider method(s) such as assembly.AddInstruction
                 if (ExpressionEvaluator.TryParseLiteral(operand, out operandValue)) {
                     assembly.ParsedInstructions.Add(new ParsedInstruction((byte)opcodeVal, operandValue, iSourceLine));
                 } else if (operand.Length > 0) {
                     assembly.ParsedInstructions.Add(new ParsedInstruction((byte)opcodeVal, operand.Trim().ToString(), iSourceLine));
-                } else {
+                } else { // no operand
                     assembly.ParsedInstructions.Add(new ParsedInstruction((byte)opcodeVal, default(LiteralValue), iSourceLine));
                 }
             } else {
@@ -273,8 +270,8 @@ namespace snarfblasm
         static List<char> charBuilder = new List<char>();
         static object ParseLock = new object();
 
-        static char[] escapeCodes = new char[] { 't', 'r', 'n' ,'\"'};
-        static char[] escapeValues = new char[] { '\t', '\r', '\n' ,'\"'};
+        static char[] escapeCodes = new char[] { 't', 'r', 'n', '\"' };
+        static char[] escapeValues = new char[] { '\t', '\r', '\n', '\"' };
         /// <summary>
         /// Returns a char array containing all the characters from a string. Escapes are processed. The specified string
         /// should not include the opening quote. The parsed string will be removed from the string passed in. The closing
@@ -324,10 +321,37 @@ namespace snarfblasm
         /// <param name="exp"></param>
         /// <returns></returns>
         /// <remarks>This function will parse "namespace::identifier" as a single symbol. </remarks>
-        private StringSection GetSymbol(StringSection exp) {
+        private NamespacedLabelName GetSymbol(StringSection exp) {
+            //// Check for special '$' variable
+            //if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
+            //    // Todo: how can the char be a letter or digit if its '$'?
+            //    return NamespacedLabelName.CurrentInstruction; //"$";
+            //}
+
+            //if (exp.Length == 0) return NamespacedLabelName.Empty;
+            //if (!char.IsLetter(exp[0]) && exp[0] != '@' && exp[0] != '_') return NamespacedLabelName.Empty;
+
+            //int i = 1;
+            //while (i < exp.Length) {
+            //    char c = exp[i];
+            //    if (char.IsLetter(c) | char.IsDigit(c) | c == '_') {
+            //        i++;
+            //    } else if(c == ':' && (i + 1 <exp.Length) && exp[i+1] == ':' ) {
+            //        // :: <- namespace char
+            //        i += 2;
+            //    } else {
+            //        var result = exp.Substring(0, i);
+            //        return result;
+            //    }
+            //}
+            //return exp;
+            return GrabLabelName(ref exp, false);
+        }
+
+        private StringSection GrabSimpleName(ref StringSection exp) {
             // Check for special '$' variable
-            if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
-                // Todo: how can the char be a letter or digit if its '$'?
+            if (exp.Length > 0 && exp[0] == '$') {
+                exp = exp.Substring(1);
                 return "$";
             }
 
@@ -339,17 +363,28 @@ namespace snarfblasm
                 char c = exp[i];
                 if (char.IsLetter(c) | char.IsDigit(c) | c == '_') {
                     i++;
-                } else if(c == ':' && (i + 1 <exp.Length) && exp[i+1] == ':' ) {
-                    // :: <- namespace char
-                    i += 2;
                 } else {
+                    // Return up to i
                     var result = exp.Substring(0, i);
+                    exp = exp.Substring(i);
                     return result;
                 }
             }
-            return exp;
+
+            // Return whole thing
+            var temp = exp;
+            exp = StringSection.Empty;
+            return temp;
         }
 
+        private bool ParseDirective(NamespacedLabelName directiveName, StringSection line, int sourceLine, out Error error) {
+            if (!directiveName.IsSimple) {
+                error = new Error(ErrorCode.Directive_Not_Defined, string.Format(Error.Msg_DirectiveUndefined_name, directiveName.ToString()), sourceLine);
+                return false;
+            } else {
+                return ParseDirective(directiveName.name, line, sourceLine, out error);
+            }
+        }
         /// <summary>
         /// Returns true of a directive was parsed, even if it was not parsed successfully due to an error
         /// </summary>
@@ -358,7 +393,7 @@ namespace snarfblasm
         /// <param name="sourceLine"></param>
         /// <param name="error"></param>
         /// <returns></returns>
-        private bool ParseDirective(StringSection directiveName, StringSection line, int sourceLine, out Error error) {
+        private bool ParseDirective(string directiveName, StringSection line, int sourceLine, out Error error) {
             error = Error.None;
 
             if (StringEquals(directiveName, "org", true)) {
@@ -372,11 +407,11 @@ namespace snarfblasm
             } else if (StringEquals(directiveName, "patch", true)) {
                 assembly.Directives.Add(new PatchDirective(NextInstructionIndex, sourceLine, line.ToString()));
             } else if (StringEquals(directiveName, "define", true)) {
-                line = line.Trim();
-                if (GetSymbol(line).Length == line.Length) { // line should contain a only a symbol
+                var remainder = line.Trim();
+                if (GrabSimpleName(ref remainder).Length == line.Length) { // line should contain a only a symbol
                     assembly.Directives.Add(new DefineDirective(NextInstructionIndex, sourceLine, line));
                 } else {
-                    error = new Error( ErrorCode.Expected_LValue,string.Format(Error.Msg_InvalidSymbolName_name ,line.ToString()),sourceLine);
+                    error = new Error(ErrorCode.Expected_LValue, string.Format(Error.Msg_InvalidSymbolName_name, line.ToString()), sourceLine);
                 }
             } else if (StringEquals(directiveName, "hex", true)) {
                 assembly.Directives.Add(new HexDirective(NextInstructionIndex, sourceLine, line));
@@ -419,14 +454,14 @@ namespace snarfblasm
             } else if (StringEquals(directiveName, "needcolon", true)) {
                 assembly.Directives.Add(new OptionDirective(NextInstructionIndex, sourceLine, directiveName.ToString(), line.Trim().ToString()));
             } else if (StringEquals(directiveName, "alias", true)) {
-                var varName = GetSymbol(line);
-                if (varName.IsNullOrEmpty) {
+                var varName = GrabLabelName(ref line, false);
+                line = line.Trim();
+
+                if (varName.IsEmpty) {
                     error = new Error(ErrorCode.Syntax_Error, Error.Msg_ExpectedText, sourceLine);
                     return true;
                 }
-                line = line.Substring(varName.Length).Trim();
-
-                assembly.Directives.Add(new Assignment(NextInstructionIndex, sourceLine, varName,true, new AsmValue(line.ToString())));
+                assembly.Directives.Add(new Assignment(NextInstructionIndex, sourceLine, varName, true, new AsmValue(line.ToString())));
             } else {
                 return false;
             }
@@ -568,7 +603,7 @@ namespace snarfblasm
             if (!char.IsLetter(simpleName[0]) && simpleName[0] != '@' && simpleName[0] != '_')
                 return false;
             // Namespaced labels can't be local
-            if (simpleName[0] == '@' && !labelName.nspace.IsNullOrEmpty) return false; // Todo: produce a useful error instead of ignoring invalid syntax
+            if (simpleName[0] == '@' && !string.IsNullOrEmpty(labelName.nspace)) return false; // Todo: produce a useful error instead of ignoring invalid syntax
 
             for (int i = 1; i < simpleName.Length; i++) { // i = 1 because we've already checked zero
                 if (!char.IsLetter(simpleName[i]) && !char.IsDigit(simpleName[i]) && simpleName[i] != '_')
@@ -580,7 +615,7 @@ namespace snarfblasm
                 string fullName = mostRecentNamedLabel + "." + simpleName.ToString(); // example: SomeFunction.LoopTop
                 assembly.Labels.Add(new NamespacedLabel(fullName, null, iParsedLine, iSourceLine, true));
             } else { // Normal label
-                assembly.Labels.Add(new NamespacedLabel(labelName.name.ToString(), labelName.nspace.ToString(), iParsedLine, iSourceLine, false));
+                assembly.Labels.Add(new NamespacedLabel(labelName.name, labelName.nspace, iParsedLine, iSourceLine, false));
             }
             line = lineCopy; //line.Substring(iColon + 1).TrimLeft();
 
@@ -592,12 +627,12 @@ namespace snarfblasm
         /// <param name="checkForAssign">If true, the presence of a := symbol following a name will cause the name to NOT be parsed</param>
         /// <returns>A string containing a label, or an empty string.</returns>
         /// <remarks>Whitespace preceeding the label name will be cropped out.</remarks>
-        private labelName GrabLabelName(ref StringSection line, bool checkForAssign) {
+        private NamespacedLabelName GrabLabelName(ref StringSection line, bool checkForAssign) {
             var iColon = line.IndexOf(':');
 
-            if (iColon == -1) return labelName.Empty;
+            if (iColon == -1) return NamespacedLabelName.Empty;
             if (checkForAssign && (line.Length - 1 > iColon) && (line[iColon + 1] == '=')) {
-                return labelName.Empty; // "x := y" is not a label
+                return NamespacedLabelName.Empty; // "x := y" is not a label
             }
 
             // Namespace::label
@@ -608,34 +643,34 @@ namespace snarfblasm
                     var iColon2 = restOfLine.IndexOf(':');
                     if (iColon2 >= 0) {
                         if (checkForAssign && restOfLine.Length - 1 > iColon2 && restOfLine[iColon2 + 1] == '=') {
-                            return labelName.Empty; // "n::x := y" is not a label
+                            return NamespacedLabelName.Empty; // "n::x := y" is not a label
                         }
 
                         var label = restOfLine.Substring(iColon2).Trim();
                         line = restOfLine.Substring(iColon2 + 1);
-                        return new labelName(nspace, label);
+                        return new NamespacedLabelName(label.ToString(), nspace.ToString());
                     } else {
-                        return labelName.Empty;
+                        return NamespacedLabelName.Empty;
                     }
                 }
             }
 
             var result = line.Substring(0, iColon).Trim();
             line = line.Substring(iColon);
-            return new labelName(StringSection.Empty, result);
+            return new NamespacedLabelName(result.ToString(), null);
         }
 
-        private struct labelName
-        {
-            public labelName(StringSection nspace, StringSection name) {
-                this.nspace = nspace;
-                this.name = name;
-            }
-            public StringSection nspace;
-            public StringSection name;
-            public bool IsEmpty { get { return name.IsNullOrEmpty; } }
-            public static readonly labelName Empty;
-        }
+        //private struct labelName
+        //{
+        //    public labelName(StringSection nspace, StringSection name) {
+        //        this.nspace = nspace;
+        //        this.name = name;
+        //    }
+        //    public StringSection nspace;
+        //    public StringSection name;
+        //    public bool IsEmpty { get { return name.IsNullOrEmpty; } }
+        //    public static readonly labelName Empty;
+        //}
 
         private static void StripComments(ref StringSection line) {
             int iComment = line.IndexOf(';');
@@ -824,7 +859,7 @@ namespace snarfblasm
     }
 
 
-    
+
 
     /// <summary>
     /// Defines the interface used to get/set variable and label values.
@@ -838,12 +873,13 @@ namespace snarfblasm
         int GetForwardBrace(int labelLevel, int iSourceLine);
         int GetBackwardBrace(int labelLevel, int iSourceLine);
 
-        void SetValue(StringSection name, LiteralValue value, bool isFixed, out Error error);
-        void SetValue(StringSection name, StringSection nspace, LiteralValue value, bool isFixed, out Error error);
-        LiteralValue GetValue(StringSection name);
-        LiteralValue GetValue(StringSection name, StringSection nspace);
-        bool TryGetValue(StringSection name, out LiteralValue result);
-        bool TryGetValue(StringSection name, StringSection nspace, out LiteralValue result);
+        void SetValue(NamespacedLabelName name, LiteralValue value, bool isFixed, out Error error);
+        //void SetValue(StringSection name, StringSection nspace, LiteralValue value, bool isFixed, out Error error);
+        LiteralValue GetValue(NamespacedLabelName name);
+        //LiteralValue GetValue(StringSection name, StringSection nspace);
+        //bool TryGetValue(StringSection name, out LiteralValue result);
+        //bool TryGetValue(StringSection name, StringSection nspace, out LiteralValue result);
+        bool TryGetValue(NamespacedLabelName name, out LiteralValue result);
     }
 
 }

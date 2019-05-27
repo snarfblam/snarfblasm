@@ -21,13 +21,13 @@ namespace snarfblasm
 
     class Assignment : Directive
     {
-        public Assignment(int instructionIndex, int sourceLine, StringSection variable, bool isLabel, AsmValue value)
+        public Assignment(int instructionIndex, int sourceLine, NamespacedLabelName variable, bool isLabel, AsmValue value)
             : base(instructionIndex, sourceLine) {
             this.Variable = variable;
             this.Value = value;
             this.IsLabel = isLabel;
         }
-        public StringSection Variable { get; private set; }
+        public NamespacedLabelName Variable { get; private set; }
         public AsmValue Value { get; private set; }
         public bool IsLabel { get; private set; }
 
@@ -457,7 +457,8 @@ class ErrorDirective : Directive
         
         public override void Process(Pass pass, out Error error) {
             error = Error.None;
-            pass.Assembler.Assembly.SetValue(VarName, new LiteralValue(0xFFFF, false),false, out error);
+
+            pass.Assembler.Assembly.SetValue(NamespacedLabelName.Simple(VarName), new LiteralValue(0xFFFF, false), false, out error);
         }
     }
 

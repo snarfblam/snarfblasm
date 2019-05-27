@@ -20,7 +20,7 @@ namespace snarfblasm
             AddDefaultPatch();
 
             Bank = -1;
-            MostRecentNamedLabel = "!unnamed!";
+            MostRecentNamedLabel = new NamespacedLabelName("!unnamed!", null);
 
             Assembler.Evaluator.MostRecentNamedLabelGetter = getMostRecentNamedLabel;
             //Values = new Dictionary<string, LiteralValue>(StringComparer.InvariantCultureIgnoreCase);
@@ -38,18 +38,19 @@ namespace snarfblasm
         /// </summary>
         public bool HasPatchDirective { get; private set; }
 
-        protected string MostRecentNamedLabel { get; private set; }
-        string getMostRecentNamedLabel() {
+        protected NamespacedLabelName MostRecentNamedLabel { get; private set; }
+        NamespacedLabelName getMostRecentNamedLabel() {
             return MostRecentNamedLabel;
         }
 
         // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
 
         //public Dictionary<string, LiteralValue> Values = new Dictionary<string, LiteralValue>(StringComparer.InvariantCultureIgnoreCase);
-        public PassValuesCollection Values = new PassValuesCollection();
+        public snarfblasm.assembler.PassValuesCollection Values = new snarfblasm.assembler.PassValuesCollection();
 
         public int CurrentAddress { get; set; }
         public int OriginOffset { get; set; }
+        public string CurrentNamespace { get; set; }
 
         public bool OriginSet { get { return OriginOffset >= 0; } }
 
@@ -364,7 +365,7 @@ namespace snarfblasm
                 return null;
             }
 
-            return Values.NameExists(directive.condition.ToString());
+            return Values.NameExists(new NamespacedLabelName(directive.condition.ToString(), null));
         }
 
         #endregion
@@ -433,7 +434,7 @@ namespace snarfblasm
             bool isAnon = label.name[0] == '~';
 
             if (!label.local && !isAnon) {
-                MostRecentNamedLabel = label.name;
+                MostRecentNamedLabel = label.GetName();
             }
         }
 
@@ -581,77 +582,6 @@ namespace snarfblasm
       
         #endregion
 
-        public class PassValuesCollection
-        {
-            Dictionary<string, PassValue> Values = new Dictionary<string, PassValue>(StringComparer.InvariantCultureIgnoreCase);
-
-            public PassValuesCollection() {
-
-            }
-
-            public LiteralValue this[string name]{
-                get{
-                    return Values[name].value;
-                }
-            }
-
-            public LiteralValue? TryGetValue(string name) {
-                PassValue result;
-                bool found = Values.TryGetValue(name, out result);
-                return found ? (LiteralValue?)result.value : null;
-            }
-
-            // Todo: A top-to-bottom approach doesn't seem to be working here. Better to work bottom up,
-            // introducing breaking interface changes so that any references to modified code are detected.
-            public void SetValue(string name, LiteralValue value, bool isFixed, out bool valueIsFixedError) {
-                PassValue existingValue;
-                bool exists = Values.TryGetValue(name,out existingValue);
-
-                if (exists) {
-                    if (existingValue.isFixed) {
-                        valueIsFixedError = true;
-                        return;
-                    } else {
-                        Values.Remove(name);
-                    }
-                }
-
-                Values.Add(name, new PassValue(value, isFixed));
-                valueIsFixedError = false;
-            }
-
-            public bool RemoveValue(string name, out bool valueIsFixedError){
-                PassValue existingValue;
-                bool exists = Values.TryGetValue(name,out existingValue);
-
-                if (exists) {
-                    if (existingValue.isFixed) {
-                        valueIsFixedError = true;
-                        return false;
-                    } else {
-                        Values.Remove(name);
-                        valueIsFixedError = false;
-                        return true;
-                    }
-                }
-
-                valueIsFixedError = false;
-                return false;
-            }
-            private struct PassValue
-            {
-                public PassValue(LiteralValue value, bool isFixed) {
-                    this.value = value;
-                    this.isFixed = isFixed;
-                }
-                public LiteralValue value;
-                public bool isFixed;
-            }
-
-            internal bool NameExists(string name) {
-                return Values.ContainsKey(name);
-            }
-        }
     }
 
     class FirstPass : Pass
@@ -722,14 +652,15 @@ namespace snarfblasm
             if (isAnonymous) {
                 Assembly.AnonymousLabels.ResolveNextPointer((ushort)CurrentAddress);
             } else {
-                if (Values.NameExists(label.name)) {
+                var lblName = label.GetName();
+                if (Values.NameExists(lblName)) {
                     AddError(new Error(ErrorCode.Value_Already_Defined, string.Format(Error.Msg_ValueAlreadyDefined_name, label.name), label.SourceLine));
                 } else {
                     bool isFixedError; // Todo: handle this  (ummmm...don't know what this even is anymore)
                     if (label.address < 0x100) {
-                        Values.SetValue(label.name, new LiteralValue((ushort)CurrentAddress, true),true, out isFixedError);
+                        Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, true), true, out isFixedError);
                     } else {
-                        Values.SetValue(label.name, new LiteralValue((ushort)CurrentAddress, false),true,out isFixedError);
+                        Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, false), true, out isFixedError);
                     }
                 }
             }
@@ -913,7 +844,7 @@ namespace snarfblasm
         private void LoadLabelValues() {
             bool isFixedError; // Todo: handle this
             foreach (var label in Assembly.Labels) {
-                Values.SetValue(label.name, new LiteralValue((ushort)label.address, false),true,out isFixedError);
+                Values.SetValue(label.GetName(), new LiteralValue((ushort)label.address, false),true,out isFixedError);
             }
         }
 

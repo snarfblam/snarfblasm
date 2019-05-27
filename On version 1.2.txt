@@ -1,7 +1,5 @@
-﻿This document describes changes to the "standard" the software attempts to
-implement for version 1.2. It describes how new features interact with 
-pre-existing features and/or options, as well as how new features work
-in general.
+﻿Features planned:
+    Debug output (take from Editroid)
 
 Namespacing:
     Default namespace (Referred to as such for internal technical reasons)
