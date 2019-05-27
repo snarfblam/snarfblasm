@@ -443,7 +443,8 @@ namespace snarfblasm
                 assembly.Directives.Add(new StorageDirective(NextInstructionIndex, sourceLine, line, StorageDirective.DataType.Bytes));
             } else if (StringEquals(directiveName, "dsw", true)) {
                 assembly.Directives.Add(new StorageDirective(NextInstructionIndex, sourceLine, line, StorageDirective.DataType.Words));
-
+            } else if (StringEquals(directiveName, "namespace", true)) {
+                assembly.Directives.Add(new NamespaceDirective(NextInstructionIndex, sourceLine, line));
             } else if (StringEquals(directiveName, "overflow", true)) {
                 assembly.Directives.Add(new OptionDirective(NextInstructionIndex, sourceLine, directiveName.ToString(), line.Trim().ToString()));
             } else if (StringEquals(directiveName, "if", true)
@@ -485,15 +486,6 @@ namespace snarfblasm
         }
 
 
-        private void ProcessDirective(StringSection directiveName, StringSection directiveText) {
-            string directive = directiveName.ToString().ToUpper();
-            switch (directive) {
-                case "ORG":
-
-                default:
-                    break;
-            }
-        }
 
         // This list should be sorted alphabetically.
         StringSection[] directiveNames = { "BASE", "ORG", };

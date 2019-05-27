@@ -462,6 +462,35 @@ class ErrorDirective : Directive
         }
     }
 
+    class NamespaceDirective : Directive
+    {
+        public NamespaceDirective(int iInstruction, int iSourceLine, StringSection nsName)
+            : base(iInstruction, iSourceLine) {
+
+            this.nsName = nsName.Trim().ToString();
+        }
+
+        string nsName;
+        
+        public override void Process(Pass pass, out Error error) {
+            error = Error.None;
+
+            bool invalid = nsName.Length > 0 && !(char.IsLetter(nsName[0]) | nsName[0] == '_');
+            for (var i = 1; i < nsName.Length; i++) {
+                invalid |= !(char.IsLetterOrDigit(nsName[i]) | nsName[i] == '_');
+            }
+
+            if (invalid) {
+                error = new Error(ErrorCode.Invalid_Directive_Value, string.Format(Error.Msg_InvalidSymbolName_name, nsName), this.SourceLine);
+            } else if (nsName.Length == 0) {
+                pass.CurrentNamespace = null;
+            } else {
+                pass.CurrentNamespace = this.nsName;
+            }
+        }
+    }
+
+
     
     class ConditionalDirective : Directive
     {

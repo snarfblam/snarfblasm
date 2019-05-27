@@ -50,7 +50,13 @@ namespace snarfblasm
 
         public int CurrentAddress { get; set; }
         public int OriginOffset { get; set; }
-        public string CurrentNamespace { get; set; }
+        string _CurrentNamespace = null;
+        public string CurrentNamespace {
+            get { return _CurrentNamespace; }
+            set {
+                _CurrentNamespace = Values.CurrentNamespace = value;
+            }
+        }
 
         public bool OriginSet { get { return OriginOffset >= 0; } }
 

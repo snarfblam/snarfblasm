@@ -620,7 +620,7 @@ namespace snarfblasm
 
                     return;
                 }
-            } else if (char.IsLetter(exp[0])) {
+            } else if (char.IsLetter(exp[0]) || exp[0]=='_') {
                 Identifier varName = ParseSymbol(ref exp);
                 if (!varName.IsEmpty) {
                     var rVal = GetSymbolValue(varName);

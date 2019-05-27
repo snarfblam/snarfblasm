@@ -51,7 +51,11 @@ namespace snarfblasm.assembler
         }
 
         public LiteralValue? TryGetValue(Identifier name) {
-            return Find(name.name).GetValue(name.nspace);
+            if (name.IsSimple) {
+                return Find(name.name).GetValue(CurrentNamespace, true);
+            } else {
+                return Find(name.name).GetValue(name.nspace);
+            }
         }
 
         public void SetValue(Identifier name, LiteralValue value, bool isFixed, out bool valueIsFixedError) {
@@ -127,6 +131,9 @@ namespace snarfblasm.assembler
         private class ValueLink
         {
             private ValueLink(string nspace, LiteralValue value, bool isFixed) {
+                this.Nspace = nspace;
+                this.IsFixed = IsFixed;
+                this.Value = value;
             }
 
             public static ValueLink Append(ValueLink current, string nspace, LiteralValue value, bool isFixed) {
@@ -236,17 +243,16 @@ namespace snarfblasm.assembler
                         if (defaultLink == null) {
                             // Case 3
                             Append(thisLink, nspace, value, isFixed ?? false); // I guess if 'isFixed' is not specified, we default to false
-                            return link;
                         } else {
                             // Case 2
                             if (defaultLink.IsFixed) {
                                 writeToFixedError = true;
-                                return link;
                             } else {
                                 defaultLink.Value = value;
                                 if (isFixed != null) defaultLink.IsFixed = isFixed.Value;
                             }
                         }
+                        return link;
                     }
 
                     link = next;
