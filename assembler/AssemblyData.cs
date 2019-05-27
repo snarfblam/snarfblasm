@@ -178,8 +178,8 @@ namespace snarfblasm
         public readonly string nspace;
 
         public bool IsEmpty { get { return String.IsNullOrEmpty(this.name); } }
-        /// <summary>Returns whether this name is 'simple', having no specified namespace. Returns true for empty values.</summary>
-        public bool IsSimple { get { return string.IsNullOrEmpty(this.nspace); } }
+        /// <summary>Returns whether this name is 'simple', having no specified namespace. Returns false for empty values.</summary>
+        public bool IsSimple { get { return !string.IsNullOrEmpty(this.name) && string.IsNullOrEmpty(this.nspace); } }
         public static readonly Identifier Empty;
         public static readonly Identifier CurrentInstruction = new Identifier("$", null);
 

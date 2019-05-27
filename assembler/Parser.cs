@@ -118,9 +118,9 @@ namespace snarfblasm
             do {
                 loopAgain = false;
 
-                var symbol = GrabLabelName(ref line, true);
+                var symbol = GrabIdentifier(ref line);
                 //var symbol = GrabSimpleName(ref line);
-                if (symbol.IsEmpty) break;
+                // if (symbol.IsEmpty) break;
                 line = line.TrimLeft();
 
                 if (ParseDirective(symbol, line, iSourceLine, out error))
@@ -316,36 +316,50 @@ namespace snarfblasm
             }
         }
         /// <summary>
-        /// Returns a symbol name (identifier or '$' character), or a zero-length string if no symbol was found.
+        /// Returns a symbol name (identifier or '$' character), or an empty value if nothing is found.
+        /// Will not parse local labels.
         /// </summary>
         /// <param name="exp"></param>
         /// <returns></returns>
         /// <remarks>This function will parse "namespace::identifier" as a single symbol. </remarks>
-        private Identifier GetSymbol(StringSection exp) {
-            //// Check for special '$' variable
-            //if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
-            //    // Todo: how can the char be a letter or digit if its '$'?
-            //    return NamespacedLabelName.CurrentInstruction; //"$";
-            //}
+        private Identifier GrabIdentifier(ref StringSection exp) {
+            var line = exp;
 
-            //if (exp.Length == 0) return NamespacedLabelName.Empty;
-            //if (!char.IsLetter(exp[0]) && exp[0] != '@' && exp[0] != '_') return NamespacedLabelName.Empty;
+            // Check for special '$' variable
+            if (exp.Length > 0 && exp[0] == '$' && !char.IsLetter(exp[0]) && !char.IsDigit(exp[0])) {
+                // Todo: how can the char be a letter or digit if its '$'?
+                return Identifier.CurrentInstruction; //"$";
+            }
 
-            //int i = 1;
-            //while (i < exp.Length) {
-            //    char c = exp[i];
-            //    if (char.IsLetter(c) | char.IsDigit(c) | c == '_') {
-            //        i++;
-            //    } else if(c == ':' && (i + 1 <exp.Length) && exp[i+1] == ':' ) {
-            //        // :: <- namespace char
-            //        i += 2;
-            //    } else {
-            //        var result = exp.Substring(0, i);
-            //        return result;
-            //    }
-            //}
-            //return exp;
-            return GrabLabelName(ref exp, false);
+            if (exp.Length == 0) return Identifier.Empty;
+            if (!char.IsLetter(exp[0]) && exp[0] != '@' && exp[0] != '_') return Identifier.Empty;
+            var iNamespace = -1;
+
+            int i = 1;
+            while (i < exp.Length) {
+                char c = exp[i];
+                if (char.IsLetterOrDigit(c) | c == '_') {
+                    i++;
+                } else if (c == ':' && (i + 2 < exp.Length) && exp[i + 1] == ':') {
+                    // :: <- namespace char
+                    iNamespace = i;
+                    i += 2;
+                } else {
+                    break; // end of identifier
+                }
+            }
+
+            exp = exp.Substring(i); // Chop off whatever we found
+
+            if (iNamespace < 0) {
+                return new Identifier(line.Substring(0, i).ToString(), null);
+            } else {
+                return new Identifier(line.Substring(0, iNamespace).ToString(), line.Substring(iNamespace + 2, i - iNamespace - 2).ToString());
+            }
+        }
+
+        private static bool IsIdentifierChar(char c) {
+            return c == '_' | char.IsLetterOrDigit(c);
         }
 
         private StringSection GrabSimpleName(ref StringSection exp) {
@@ -454,7 +468,7 @@ namespace snarfblasm
             } else if (StringEquals(directiveName, "needcolon", true)) {
                 assembly.Directives.Add(new OptionDirective(NextInstructionIndex, sourceLine, directiveName.ToString(), line.Trim().ToString()));
             } else if (StringEquals(directiveName, "alias", true)) {
-                var varName = GrabLabelName(ref line, false);
+                var varName = GrabLabel(ref line, false);
                 line = line.Trim();
 
                 if (varName.IsEmpty) {
@@ -594,7 +608,7 @@ namespace snarfblasm
 
         private bool ParseNamedLabels(ref StringSection line, int iParsedLine, int iSourceLine) {
             var lineCopy = line; // Don't want to mutate line if we don't actually do anything
-            var labelName = GrabLabelName(ref lineCopy, true);
+            var labelName = GrabLabel(ref lineCopy, true);
             if (labelName.IsEmpty) return false;
 
             // Check for nonzero length and that label starts with letter or @ or _
@@ -627,7 +641,7 @@ namespace snarfblasm
         /// <param name="checkForAssign">If true, the presence of a := symbol following a name will cause the name to NOT be parsed</param>
         /// <returns>A string containing a label, or an empty string.</returns>
         /// <remarks>Whitespace preceeding the label name will be cropped out.</remarks>
-        private Identifier GrabLabelName(ref StringSection line, bool checkForAssign) {
+        private Identifier GrabLabel(ref StringSection line, bool checkForAssign) {
             var iColon = line.IndexOf(':');
 
             if (iColon == -1) return Identifier.Empty;
@@ -656,21 +670,9 @@ namespace snarfblasm
             }
 
             var result = line.Substring(0, iColon).Trim();
-            line = line.Substring(iColon);
+            line = line.Substring(iColon + 1);
             return new Identifier(result.ToString(), null);
         }
-
-        //private struct labelName
-        //{
-        //    public labelName(StringSection nspace, StringSection name) {
-        //        this.nspace = nspace;
-        //        this.name = name;
-        //    }
-        //    public StringSection nspace;
-        //    public StringSection name;
-        //    public bool IsEmpty { get { return name.IsNullOrEmpty; } }
-        //    public static readonly labelName Empty;
-        //}
 
         private static void StripComments(ref StringSection line) {
             int iComment = line.IndexOf(';');
