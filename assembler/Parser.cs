@@ -20,35 +20,35 @@ namespace snarfblasm
         Identifier mostRecentNamedLabel = new Identifier("_nolabel_", null);
 
 
-        // Todo: Move TryToConvertToZeroPage and FindOpcode to another class, probably assembler. 
-        // (The only reason they need to be instance methods is for AllowInvalidOpcodes, but this
-        //  could also be specified as a parameter).
-        public bool TryToConvertToZeroPage(ref ParsedInstruction instruction) {
-            var op = Opcode.allOps[instruction.opcode];
-            var addressing = op.addressing;
-            Opcode.addressing newAddressing = addressing;
+        //// Todo: Move TryToConvertToZeroPage and FindOpcode to another class, probably assembler. 
+        //// (The only reason they need to be instance methods is for AllowInvalidOpcodes, but this
+        ////  could also be specified as a parameter).
+        //public bool TryToConvertToZeroPage(ref ParsedInstruction instruction, bool allowInvalidOpcodes) {
+        //    var op = Opcode.allOps[instruction.opcode];
+        //    var addressing = op.addressing;
+        //    Opcode.addressing newAddressing = addressing;
 
-            switch (addressing) {
-                case Opcode.addressing.absolute:
-                    newAddressing = Opcode.addressing.zeropage;
-                    break;
-                case Opcode.addressing.absoluteIndexedX:
-                    newAddressing = Opcode.addressing.zeropageIndexedX;
-                    break;
-                case Opcode.addressing.absoluteIndexedY:
-                    newAddressing = Opcode.addressing.zeropageIndexedY;
-                    break;
-            }
+        //    switch (addressing) {
+        //        case Opcode.addressing.absolute:
+        //            newAddressing = Opcode.addressing.zeropage;
+        //            break;
+        //        case Opcode.addressing.absoluteIndexedX:
+        //            newAddressing = Opcode.addressing.zeropageIndexedX;
+        //            break;
+        //        case Opcode.addressing.absoluteIndexedY:
+        //            newAddressing = Opcode.addressing.zeropageIndexedY;
+        //            break;
+        //    }
 
-            if (addressing == newAddressing) return false;
+        //    if (addressing == newAddressing) return false;
 
-            int newOpcode = FindOpcode(op.name, newAddressing);
-            if (newOpcode >= 0) {
-                instruction = new ParsedInstruction(instruction, (byte)newOpcode);
-                return true;
-            }
-            return false;
-        }
+        //    int newOpcode = Opcode.FindOpcode(op.name, newAddressing, allowInvalidOpcodes);
+        //    if (newOpcode >= 0) {
+        //        instruction = new ParsedInstruction(instruction, (byte)newOpcode);
+        //        return true;
+        //    }
+        //    return false;
+        //}
 
         /// <summary>
         /// Parses code from a list of sub-strings. (Useful if the code
@@ -188,13 +188,13 @@ namespace snarfblasm
             error = Error.None;
             if (operand.Length > 0 && operand[0] == '@') { }
             var addressing = ParseAddressing(ref operand);
-            int opcodeVal = FindOpcode(instruction, addressing);
+            int opcodeVal = Opcode.FindOpcode(instruction, addressing, Assembler.AllowInvalidOpcodes);
 
             // Some instructions only support zero-page addressing variants of certain addressing modes
             if ((OpcodeError)opcodeVal == OpcodeError.InvalidAddressing) {
                 var newAddressing = addressing;
                 if (TryZeroPageEqivalent(ref newAddressing)) {
-                    opcodeVal = FindOpcode(instruction, newAddressing);
+                    opcodeVal = Opcode.FindOpcode(instruction, newAddressing, Assembler.AllowInvalidOpcodes);
                     if (opcodeVal >= 0) addressing = newAddressing; // Keep the zero-page addressing 
                 }
             }
@@ -677,66 +677,49 @@ namespace snarfblasm
             return StringSection.Compare(a, b, ignoreCase) == 0;
         }
 
-        /// <summary>
-        /// Returns a value between 0 and 255, or -1 if no opcode was found, or -2 if the addressing mode is not available for the instruction..
-        /// </summary>
-        /// <param name="instruction"></param>
-        /// <param name="addressing"></param>
-        /// <returns></returns>
-        private int FindOpcode(StringSection instruction, Opcode.addressing addressing) {
-            var ops = Opcode.allOps;
-            bool instructionFound = false;
-            bool foundInstructionInvalid = false;
+        ///// <summary>
+        ///// Returns a value between 0 and 255, or -1 if no opcode was found, or -2 if the addressing mode is not available for the instruction..
+        ///// </summary>
+        ///// <param name="instruction"></param>
+        ///// <param name="addressing"></param>
+        ///// <returns></returns>
+        //private static int FindOpcode(StringSection instruction, Opcode.addressing addressing, bool allowInvalidOpcodes) {
+        //    var ops = Opcode.allOps;
+        //    bool instructionFound = false;
+        //    bool foundInstructionInvalid = false;
 
-            for (int i = 0; i < Opcode.allOps.Length; i++) {
-                if (StringEquals(ops[i].name, instruction, true)) {
-                    // Note that the instruction exists. We need to tell the user whether 
-                    // an instruction does not exist or the desired addressing mode is not available.
-                    instructionFound = true;
+        //    for (int i = 0; i < Opcode.allOps.Length; i++) {
+        //        if (StringEquals(ops[i].name, instruction, true)) {
+        //            // Note that the instruction exists. We need to tell the user whether 
+        //            // an instruction does not exist or the desired addressing mode is not available.
+        //            instructionFound = true;
 
-                    var addrMode = ops[i].addressing;
+        //            var addrMode = ops[i].addressing;
 
-                    // Branch instructions will be treated as absolute until they are actually encoded.
-                    if (addrMode == Opcode.addressing.relative) addrMode = Opcode.addressing.absolute;
+        //            // Branch instructions will be treated as absolute until they are actually encoded.
+        //            if (addrMode == Opcode.addressing.relative) addrMode = Opcode.addressing.absolute;
 
-                    if (addressing == addrMode) {
-                        if (ops[i].valid | Assembler.AllowInvalidOpcodes)
-                            return i;
-                        else
-                            foundInstructionInvalid = true;
-                    }
-                }
-            }
+        //            if (addressing == addrMode) {
+        //                if (ops[i].valid | allowInvalidOpcodes)
+        //                    return i;
+        //                else
+        //                    foundInstructionInvalid = true;
+        //            }
+        //        }
+        //    }
 
-            if (instructionFound) {
-                if (foundInstructionInvalid) {
-                    return (int)OpcodeError.InvalidOpcode;
-                } else {
-                    return (int)OpcodeError.InvalidAddressing;
-                }
-            } else {
-                return (int)OpcodeError.UnknownInstruction;
-            }
-        }
+        //    if (instructionFound) {
+        //        if (foundInstructionInvalid) {
+        //            return (int)OpcodeError.InvalidOpcode;
+        //        } else {
+        //            return (int)OpcodeError.InvalidAddressing;
+        //        }
+        //    } else {
+        //        return (int)OpcodeError.UnknownInstruction;
+        //    }
+        //}
 
-        /// <summary>
-        /// Identifies errors related to instructions and addressing modes.
-        /// </summary>
-        enum OpcodeError
-        {
-            /// <summary>
-            /// There is no instruction by the specified name.
-            /// </summary>
-            UnknownInstruction = -1,
-            /// <summary>
-            /// The specified addressing mode is not supported for the instruction.
-            /// </summary>
-            InvalidAddressing = -2,
-            /// <summary>
-            /// The specified instruction or addressing mode exists but is not supported.
-            /// </summary>
-            InvalidOpcode = -3
-        }
+
         bool ParseOperand(StringSection operand, out LiteralValue value, out string expression) {
 
             if (ExpressionEvaluator.TryParseLiteral(operand, out value)) {

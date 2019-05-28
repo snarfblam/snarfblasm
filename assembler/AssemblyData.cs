@@ -41,6 +41,35 @@ namespace snarfblasm
             anonLabelIndex++;
         }
 
+
+        public ParsedInstruction TryToConvertToZeroPage(int instructionIndex, bool allowInvalidOpcodes) {
+            var instruction = this.ParsedInstructions[instructionIndex];
+            var op = Opcode.allOps[instruction.opcode];
+            var addressing = op.addressing;
+            Opcode.addressing newAddressing = addressing;
+
+            switch (addressing) {
+                case Opcode.addressing.absolute:
+                    newAddressing = Opcode.addressing.zeropage;
+                    break;
+                case Opcode.addressing.absoluteIndexedX:
+                    newAddressing = Opcode.addressing.zeropageIndexedX;
+                    break;
+                case Opcode.addressing.absoluteIndexedY:
+                    newAddressing = Opcode.addressing.zeropageIndexedY;
+                    break;
+            }
+
+            if (addressing == newAddressing) return instruction;
+
+            int newOpcode = Opcode.FindOpcode(op.name, newAddressing, allowInvalidOpcodes);
+            if (newOpcode >= 0) {
+                instruction = new ParsedInstruction(instruction, (byte)newOpcode);
+                this.ParsedInstructions[instructionIndex] = instruction;
+            }
+            return instruction;
+        }
+
         #region IValueNamespace Members
 
         public int GetForwardLabel(int labelLevel, int iSourceLine) {

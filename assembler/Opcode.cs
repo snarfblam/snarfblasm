@@ -1,11 +1,53 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using Romulus;
 
 namespace snarfblasm
 {
     static class Opcode
     {
+        /// <summary>
+        /// Returns a value between 0 and 255, or -1 if no opcode was found, or -2 if the addressing mode is not available for the instruction..
+        /// </summary>
+        /// <param name="instruction"></param>
+        /// <param name="addressing"></param>
+        /// <returns></returns>
+        public static int FindOpcode(StringSection instruction, Opcode.addressing addressing, bool allowInvalidOpcodes) {
+            var ops = Opcode.allOps;
+            bool instructionFound = false;
+            bool foundInstructionInvalid = false;
+
+            for (int i = 0; i < Opcode.allOps.Length; i++) {
+                if (0 == StringSection.Compare(ops[i].name, instruction, true)) {
+                    // Note that the instruction exists. We need to tell the user whether 
+                    // an instruction does not exist or the desired addressing mode is not available.
+                    instructionFound = true;
+
+                    var addrMode = ops[i].addressing;
+
+                    // Branch instructions will be treated as absolute until they are actually encoded.
+                    if (addrMode == Opcode.addressing.relative) addrMode = Opcode.addressing.absolute;
+
+                    if (addressing == addrMode) {
+                        if (ops[i].valid | allowInvalidOpcodes)
+                            return i;
+                        else
+                            foundInstructionInvalid = true;
+                    }
+                }
+            }
+
+            if (instructionFound) {
+                if (foundInstructionInvalid) {
+                    return (int)OpcodeError.InvalidOpcode;
+                } else {
+                    return (int)OpcodeError.InvalidAddressing;
+                }
+            } else {
+                return (int)OpcodeError.UnknownInstruction;
+            }
+        }
 
         public enum addressing : byte
         {
@@ -23,7 +65,7 @@ namespace snarfblasm
             absoluteIndexedX, // $007F,X
             absoluteIndexedY, // $007F,Y
         }
-
+        
         public struct op
         {
             public byte index;
@@ -333,5 +375,24 @@ namespace snarfblasm
             }
         }
 
+    }
+
+    /// <summary>
+    /// Identifies errors related to instructions and addressing modes.
+    /// </summary>
+    enum OpcodeError
+    {
+        /// <summary>
+        /// There is no instruction by the specified name.
+        /// </summary>
+        UnknownInstruction = -1,
+        /// <summary>
+        /// The specified addressing mode is not supported for the instruction.
+        /// </summary>
+        InvalidAddressing = -2,
+        /// <summary>
+        /// The specified instruction or addressing mode exists but is not supported.
+        /// </summary>
+        InvalidOpcode = -3
     }
 }

@@ -228,7 +228,6 @@ namespace snarfblasm
 
 
         public byte[] GetOutput() {
-            // Todo: Turn this into a property
             return output;
         }
 

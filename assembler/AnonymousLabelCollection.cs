@@ -5,7 +5,10 @@ using System.Text;
 
 namespace snarfblasm
 {
-    // Todo: proper note that lables must be added in order
+    /// <summary>
+    /// Maintains a collection of anonymous labels. See remarks.
+    /// </summary>
+    /// <remarks>Labels must be added to this collection in lexical order.</remarks>
     class AnonymousLabelCollection
     {
         List<entry> entries = new List<entry>();
@@ -188,8 +191,6 @@ namespace snarfblasm
             iEntry_Resolution++;
         }
         
-        
-        // Todo: need way to resolve ADDRESS of these labels. This will probably need  to occur on the first pass. 
         struct entry
         {
             public entry(entryType type, int level, int iSourceLine) {

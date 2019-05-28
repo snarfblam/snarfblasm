@@ -630,11 +630,11 @@ namespace snarfblasm
             }
 
             if (SingleByteOperand) {
-                // Todo: Consider moving TryToConvertToZeroPage to more appropriate class
-                if (Assembler.Parser.TryToConvertToZeroPage(ref currentLine)) {
-                    // If the instruction can be coded as zero-page, update it
-                    Assembly.ParsedInstructions[iCurrentInstruction] = currentLine; // Todo: consider method such as UpdateParsedInstruction
-                }
+                currentLine = Assembly.TryToConvertToZeroPage(iCurrentInstruction, Assembler.AllowInvalidOpcodes);
+                //if (TryToConvertToZeroPage(ref currentLine, Assembler.AllowInvalidOpcodes)) {
+                //    // If the instruction can be coded as zero-page, update it
+                //    Assembly.ParsedInstructions[iCurrentInstruction] = currentLine; // Todo: consider method such as UpdateParsedInstruction
+                //}
             }
 
             var instructionLen = Opcode.GetParamBytes(currentLine.opcode) + 1;
