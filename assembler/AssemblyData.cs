@@ -144,7 +144,7 @@ namespace snarfblasm
             return new Identifier(this.name, this.nspace);
         }
         public readonly string name;
-        public readonly string nspace;
+        public string nspace;
         public readonly int iInstruction;
         public readonly int SourceLine;
         public ushort address;

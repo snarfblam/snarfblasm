@@ -652,6 +652,7 @@ namespace snarfblasm
             var label = Assembly.Labels[iNextLabel];
 
             label.address = (ushort)CurrentAddress;
+            label.nspace = CurrentNamespace;
             Assembly.Labels[iNextLabel] = label;
 
             bool isAnonymous = label.name[0] == '~';
