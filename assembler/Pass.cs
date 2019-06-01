@@ -25,6 +25,8 @@ namespace snarfblasm
             Assembler.Evaluator.MostRecentNamedLabelGetter = () => this.MostRecentNamedLabel;
         }
 
+        string _CurrentNamespace = null;
+
         /// <summary>Current bank. Used for debug output.</summary>
         public int Bank { get; private set; }
         /// <summary>Returns true of a .PATCH directive is encountered.</summary>
@@ -33,19 +35,24 @@ namespace snarfblasm
         protected Identifier MostRecentNamedLabel { get; private set; }
         /// <summary>Collection of named values.</summary>
         public snarfblasm.assembler.PassValuesCollection Values = new snarfblasm.assembler.PassValuesCollection();
-
-        // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
-
-
+        /// <summary>The 6502 address the next output will be written to.</summary>
         public int CurrentAddress { get; set; }
-        string _CurrentNamespace = null;
+        /// <summary>Gets/sets the namespace that values will be declared in and searched for. Set to null to use the default namespace.</summary>
         public string CurrentNamespace {
             get { return _CurrentNamespace; }
             set {
                 _CurrentNamespace = Values.CurrentNamespace = value;
             }
         }
+        /// <summary>If true, nothing is to be written to the output stream. The assembler will otherwise function as normal
+        /// (e.g. address will increase as instructions are processed).</summary>
+        public bool SurpressOutput { get; protected set; }
+        // Todo: get rid of current output offset. It is no longer used and deprecated
 
+
+        bool hasORGed = false;
+
+        // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
         // Todo: option to stop running the processing loop if a certain number of errors occur (probably with a default value, maybe 10)
 
         public void RunPass() {
@@ -62,10 +69,8 @@ namespace snarfblasm
         protected virtual void BeforePerformPass() { }
 
 
-        /// <summary>
-        /// If true, this pass has an output stream that should be written with assembled data. This
-        /// value should not change during the lifetime of a Pass object. See also SurpressOutput.
-        /// </summary>
+        /// <summary>If true, this pass has an output stream that should be written with assembled data. This
+        /// value should not change during the lifetime of a Pass object. See also SurpressOutput.</summary>
         public bool EmitOutput { get; protected set; }
         public bool ErrorOnUndefinedSymbol { get; protected set; }
         public bool AllowOverflowErrors { get; protected set; }
@@ -114,16 +119,7 @@ namespace snarfblasm
             return output;
         }
 
-        /// <summary>
-        /// If true, nothing should be written to the output stream (but behavior shold not otherwise change)
-        /// </summary>
-        public bool SurpressOutput { get; protected set; }
-        // Todo: get rid of current output offset. It is no longer used and deprecated
-        /// <summary>Deprecated. Do not use.</summary>
-        public int CurrentOutputOffset { get; set; }
 
-
-        bool hasORGed = false;
         // Todo: it looks like we have a field that is redundant (hasORGed versus OriginSet)
         public void SetOrigin(int address) {
             if (hasORGed) {
@@ -167,7 +163,6 @@ namespace snarfblasm
         }
         public void SetAddress(int address) {
             CurrentAddress = address;
-            CurrentOutputOffset = address;
 
             // Any following .ORGs should pad
             hasORGed = true;
@@ -177,7 +172,6 @@ namespace snarfblasm
         bool isInEnum;
         bool enumCache_SurpressOutput;
         int enumCache_Address;
-        int enumCache_OutputOffset;
 
         public ErrorCode BeginEnum(int address) {
             if (isInEnum) {
@@ -186,7 +180,6 @@ namespace snarfblasm
 
             isInEnum = true;
             enumCache_Address = CurrentAddress;
-            enumCache_OutputOffset = CurrentOutputOffset;
             enumCache_SurpressOutput = SurpressOutput;
 
             CurrentAddress = address;
@@ -202,7 +195,6 @@ namespace snarfblasm
 
             isInEnum = false;
             CurrentAddress = enumCache_Address;
-            CurrentOutputOffset = enumCache_OutputOffset;
             SurpressOutput = enumCache_SurpressOutput;
 
             return ErrorCode.None;
@@ -724,7 +716,6 @@ namespace snarfblasm
             }
 
             var instructionLen = Opcode.GetParamBytes(currentLine.opcode) + 1;
-            CurrentOutputOffset += instructionLen;
             CurrentAddress += instructionLen;
         }
 
@@ -773,12 +764,10 @@ namespace snarfblasm
 
         public override void OutputBytePadding(int paddingAmt, byte fillValue) {
             CurrentAddress += paddingAmt;
-            CurrentOutputOffset += paddingAmt;
         }
 
         public override void OutputWordPadding(int wordCount, ushort fillValue) {
             CurrentAddress += wordCount * 2;
-            CurrentOutputOffset += wordCount * 2;
             
         }
 
@@ -846,7 +835,6 @@ namespace snarfblasm
                 case Opcode.addressing.implied:
                     // No operand
                     CurrentAddress++;
-                    CurrentOutputOffset++;
                     break;
                 case Opcode.addressing.absoluteIndexedX:
                 case Opcode.addressing.absoluteIndexedY:
@@ -861,7 +849,6 @@ namespace snarfblasm
                         }
 
                         CurrentAddress += 3;
-                        CurrentOutputOffset += 3;
                     } else {
                         AddError(error);
                     }
@@ -888,7 +875,6 @@ namespace snarfblasm
                             OutputStream.WriteByte((byte)(operand8 & 0xFF));
 
                         CurrentAddress += 2;
-                        CurrentOutputOffset += 2;
                     } else {
                         AddError(error);
                     }
@@ -908,7 +894,6 @@ namespace snarfblasm
                             OutputStream.WriteByte((byte)operandRel);
 
                         CurrentAddress += 2;
-                        CurrentOutputOffset += 2;
                     } else {
                         AddError(error);
                     }
@@ -1001,7 +986,6 @@ namespace snarfblasm
             }
 
             CurrentAddress += paddingAmt;
-            CurrentOutputOffset += paddingAmt;
         }
 
         public override void OutputWordPadding(int wordCount, ushort fillValue) {
@@ -1013,7 +997,6 @@ namespace snarfblasm
             }
 
             CurrentAddress += wordCount * 2;
-            CurrentOutputOffset += wordCount * 2;
         }
 
 

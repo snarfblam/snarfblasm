@@ -135,7 +135,6 @@ class ErrorDirective : Directive
                 }
 
                 pass.CurrentAddress += (int)totalBytesRead;
-                pass.CurrentOutputOffset += (int)totalBytesRead;
             } else {
                 if (pass.Assembler.FileSystem.FileExists(Filename)) {
                     cachedFileSize = pass.Assembler.FileSystem.GetFileSize(Filename);
@@ -146,7 +145,6 @@ class ErrorDirective : Directive
                 }
 
                 pass.CurrentAddress += (int)cachedFileSize;
-                pass.CurrentOutputOffset += (int)cachedFileSize;
             }
         }
     }
@@ -759,7 +757,6 @@ class ErrorDirective : Directive
             switch (dataType) {
                 case DataType.Bytes:
                     pass.CurrentAddress += 1;
-                    pass.CurrentOutputOffset += 1;
                     if (pass.EmitOutput) {
                         if (value.IsByte) {
                             pass.WriteByte((byte)value.Value);
@@ -770,7 +767,6 @@ class ErrorDirective : Directive
                     break;
                 case DataType.Words:
                     pass.CurrentAddress += 2;
-                    pass.CurrentOutputOffset += 2;
                     if (pass.EmitOutput) {
                         // if (value.IsByte) {
                         //    error = new Error(ErrorCode.Type_Mismatch, Error.Msg_ValueNotWord, SourceLine);
@@ -783,13 +779,11 @@ class ErrorDirective : Directive
                 case DataType.Implicit:
                     if (value.IsByte) {
                         pass.CurrentAddress += 1;
-                        pass.CurrentOutputOffset += 1;
                         if (pass.EmitOutput) {
                             pass.WriteByte((byte)value.Value);
                         }
                     } else {
                         pass.CurrentAddress += 2;
-                        pass.CurrentOutputOffset += 2;
                         if (pass.EmitOutput) {
                             pass.WriteByte((byte)value.Value); // Low
                             pass.WriteByte((byte)(value.Value >> 8)); // High
