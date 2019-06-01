@@ -160,6 +160,7 @@ namespace snarfblasm
 
 
         int indexOfLabelBeforeInstruction(int iSourceLine) {
+            if (entries.Count == 0) return -1;
             if (iSourceLine < entries[0].iSourceLine) return -1;
 
             int start = 0;

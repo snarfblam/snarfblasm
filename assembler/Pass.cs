@@ -47,10 +47,14 @@ namespace snarfblasm
         /// <summary>If true, nothing is to be written to the output stream. The assembler will otherwise function as normal
         /// (e.g. address will increase as instructions are processed).</summary>
         public bool SurpressOutput { get; protected set; }
-        // Todo: get rid of current output offset. It is no longer used and deprecated
+        /// <summary>Indicates whether the current address is valid. Any operation that relies on the current address, such as declaring a label, requires that a valid base address be specified first, e.g. via .ORG or .SEGMENT</summary>
+        bool currentAddressValid = false;
+        /// <summary>If true, this pass has an output stream that should be written with assembled data. This
+        /// value should not change during the lifetime of a Pass object. See also SurpressOutput.</summary>
+        public bool EmitOutput { get; protected set; }
+        public bool ErrorOnUndefinedSymbol { get; protected set; }
+        public bool AllowOverflowErrors { get; protected set; }
 
-
-        bool hasORGed = false;
 
         // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
         // Todo: option to stop running the processing loop if a certain number of errors occur (probably with a default value, maybe 10)
@@ -69,11 +73,7 @@ namespace snarfblasm
         protected virtual void BeforePerformPass() { }
 
 
-        /// <summary>If true, this pass has an output stream that should be written with assembled data. This
-        /// value should not change during the lifetime of a Pass object. See also SurpressOutput.</summary>
-        public bool EmitOutput { get; protected set; }
-        public bool ErrorOnUndefinedSymbol { get; protected set; }
-        public bool AllowOverflowErrors { get; protected set; }
+
 
         private void PerformPass() {
 
@@ -87,7 +87,9 @@ namespace snarfblasm
             iCurrentInstruction = int.MaxValue - 1;
             ProcessPendingLabelsAndDirectives();
 
-            // todo: ensure that there are no open enums or if blocks
+            if (isInEnum) {
+                AddError(new Error(ErrorCode.Enum_Not_Closed, Error.Msg_EnumNoteClosed));
+            }
             // todo: throw error and stop processing if current address exceeds $FFFF
 
             //if (EmitOutput) {
@@ -122,7 +124,7 @@ namespace snarfblasm
 
         // Todo: it looks like we have a field that is redundant (hasORGed versus OriginSet)
         public void SetOrigin(int address) {
-            if (hasORGed) {
+            if (currentAddressValid) {
                 int paddingAmt = address - CurrentAddress;
 
                 //if (InPatchMode) {
@@ -159,13 +161,13 @@ namespace snarfblasm
                 SetAddress(address);
             }
 
-            hasORGed = true;
+            currentAddressValid = true;
         }
         public void SetAddress(int address) {
             CurrentAddress = address;
 
             // Any following .ORGs should pad
-            hasORGed = true;
+            currentAddressValid = true;
         }
 
         #region ENUM handling
@@ -523,7 +525,7 @@ namespace snarfblasm
         /// .PATCH without a .ORG in between should cause an error since there is no origin.
         /// </summary>
         public void ResetOrigin() {
-            hasORGed = false;
+            currentAddressValid = false;
         }
 
         #region PATCH directive stuffs
@@ -784,20 +786,11 @@ namespace snarfblasm
             AllowOverflowErrors = true;
             ErrorOnUndefinedSymbol = true;
 
-            //base.OutputStream = this.outputStream;
             var defaultSeg =  new Segment(0);
             segments.Add(defaultSegmentName, defaultSeg);
             SelectSegment(defaultSegmentName);
         }
-
-        //Stream _OutputStream = new MemoryStream();
-
         
-        
-        //public override byte[] GetOutput() {
-        //    return output;
-        //}
-
         protected override void OnSegmentSelected(string name, Segment segment) {
             // Todo: does anything need to happen here?
         }
@@ -809,16 +802,9 @@ namespace snarfblasm
 
             Assembler.Evaluator.ErrorOnUndefinedSymbols = true;
         }
-        ////protected override void PerformPass() {
 
         protected override void AfterPerformPass() {
             base.AfterPerformPass();
-
-            
-            // no longer necessary
-            //// output = _OutputStream.ToArray();
-            ////_OutputStream = null;
-
         }
 
 

@@ -44,6 +44,11 @@ namespace snarfblasm
             return EvaluateExpression(ref expression, sourceLine, evalMode.TopLevel, out error);
         }
         private LiteralValue EvaluateExpression(ref StringSection expression, int sourceLine, evalMode expType, out Error error) {
+            if (expression.Trim().Length == 0) {
+                error = new Error(ErrorCode.Expected_Expression, Error.Msg_ExpectedValue, sourceLine);
+                return default(LiteralValue);
+            }
+
             // If we re-enter, we need to save the existing state to get it back later
             if (EvaluationInProgress)
                 PushEvaluationFrame();
@@ -182,7 +187,7 @@ namespace snarfblasm
                 i++;
             }
 
-            if (i == exp.Length) { // expression was all '+'s
+            if (i > 0 && i == exp.Length) { // expression was all '+'s
                 exp = StringSection.Empty;
 
                 int address = ValueNamespace.GetForwardLabel(i, sourceLine);

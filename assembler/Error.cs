@@ -76,6 +76,7 @@ namespace snarfblasm
         public static string Msg_FileError_name = "Error occurred with file {0}.";
 
         public static string Msg_EnumError = "Error occurred with ENUM";
+        public static string Msg_EnumNoteClosed = "ENUM with missing ENDENUM";
         public static string Msg_ValueAlreadyDefined_name = "Symbol {0} is already defined.";
 
         public bool IsError { get { return Code != ErrorCode.None; } }
@@ -143,5 +144,7 @@ namespace snarfblasm
         Address_Out_Of_Range,
         /// <summary>A value by the specified name is already define</summary>
         Value_Already_Defined,
+        /// <summary>An enum block is missing its closing statement</summary>
+        Enum_Not_Closed,
     }
 }
