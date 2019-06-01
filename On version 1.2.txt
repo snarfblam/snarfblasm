@@ -1,6 +1,85 @@
 ﻿Features planned:
     Debug output (take from Editroid)
-
+    Error message expansion (could look something like ".Error This data exceeded its buffer by {$ - bufferEnd} byte(s)"
+    Non-error message output (e.g. .Message and/or .Warning)
+    
+Segments:
+    Segments become a superset of .PATCHes    
+        - A .PATCH will interpreted as a segment with appropriate defaults
+            - A .PATCH will be assigned to an 'anonymous' segment
+        - A segment gives extra control versus a .PATCH
+            - Automatic bounds checking
+            - Content duplication
+            - Namespace binding
+            - Contents do not need to be lexically contiguous. Code can be organized
+              in the manner easiest to understand or manage, instead of in the order
+              it must appear in the output.
+        - The .SEGMENT directive selects, or "enters", a segment.
+            - The same segment may be entered multiple times. Each time it picks up where
+              it left off (the context, i.e. output stream and current address) is saved
+              when the segment is exited).
+        - Segments must be defined prior to use. A syntax is available to define them "inline"
+        - A segment definition begins with ".DEFSEG {name}"
+        - A segment definition ends with one of the following
+            - .ENDDEF marks the end of a segment definition
+            - .BEGINSEG marks the end of a definition, and "enters" the segment just defined
+                - .BEGINSEG is equivalent to a .ENDDEF immediately followed by a .SEGMENT
+        - The content of a segment definition (empty lines and comments aside) consists of 
+          parameters in the form of "{name} = {value}" where each parameter may be defined 
+          at most once unless otherwise indicated. Parameter names are case-insensitive and 
+          are as follows:
+            - "OUTPUT": required. May be "NONE" (case insensitive), a bank/address value (0F:1234),
+              or an expression that evaluates to an offset.
+                - "NONE" would generally be used to define names for addresses that correspond 
+                  to RAM. Renders the segment functionally similar to a .ENUM directive.
+                    - Ignored if other OUTPUT targets are specified
+                - Specifying a bank/address value also implicitly specifies a BASE address.
+                - The OUTPUT parameter may be defined multiple times.
+                    - Doing so will cause the segment contents to be duplicated in each specified location
+                    - If multiple bank/address values are specified, only the first defines the
+                      segment's BASE address.
+            - "BASE": Required under certain circumstances. Expression which evaluates to the base 
+              address for the segment. 
+                - Required unless an OUTPUT value is specified with a bank/address syntax
+                - Overrides the base address specified by an OUTPUT with a bank/address syntax
+            - "NAMESPACE": optional. Must be a valid identifier. If specified, when the segment
+              is entered, the specified namespace is also selected. If not specified, entering
+              the segment has no effect on which namespace is selected.
+                - If a NAMESPACE parameter specifies an empty value ("NAMESPACE = "), the default
+                  namespace will be used for the segment.
+            - "SIZE": an expression which evaluates to the maximum number of bytes the segment
+              may output. If OUTPUT is set to "NONE", the SIZE constraint is enforced as if
+              output were generated. 
+            - "LIMIT": an expression which evaluates to the highest address (exclusive) the
+              segment's content can use. If OUTPUT is set to "NONE", the LIMIT constraint is
+              enforced as if output were generated.
+            - "PAD": optional. Expression which evaluates to a byte or word value that will
+              be used to fill any unused space in the segment
+                - Ignored unless SIZE or LIMIT is specified
+        - Some examples:
+            - Zero page variable space
+                .DEFSEG ZeroPage
+                  OUTPUT = NONE
+                  BASE = 0
+                  NAMESPACE =
+                  SIZE = $100
+                .BEGINSEG
+                  MyVariable: .DSB 1 ; reserve 1 byte for MyVariable
+                  ; etc
+            - Vectors
+                .DEFSEG Vectors
+                  OUTPUT = 00:FFFA
+                  OUTPUT = 01:FFFA
+                  ;etc
+                  NAMESPACE = 
+                  SIZE = 6
+                .BEGINSEG
+                  .WORD NMI
+                  .WORD RESET
+                  .WORD IRQ
+            - And, of course, segments can be used for your normal run-of-the-mill code.
+                  
+        
 Namespacing:
     Default namespace (Referred to as such for internal technical reasons)
         - The default namespace is the default namespace with no name

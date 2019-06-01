@@ -22,34 +22,22 @@ namespace snarfblasm
             Bank = -1;
             MostRecentNamedLabel = new Identifier("!unnamed!", null);
 
-            Assembler.Evaluator.MostRecentNamedLabelGetter = getMostRecentNamedLabel;
-            //Values = new Dictionary<string, LiteralValue>(StringComparer.InvariantCultureIgnoreCase);
-            ////Errors = errors.AsReadOnly();
+            Assembler.Evaluator.MostRecentNamedLabelGetter = () => this.MostRecentNamedLabel;
         }
 
-        /// <summary>
-        /// Gets/sets the current bank, used for debug output.
-        /// </summary>
-        public int Bank { get; set; }
-
-
-        /// <summary>
-        /// Returns true of a .PATCH directive is encountered.
-        /// </summary>
+        /// <summary>Current bank. Used for debug output.</summary>
+        public int Bank { get; private set; }
+        /// <summary>Returns true of a .PATCH directive is encountered.</summary>
         public bool HasPatchDirective { get; private set; }
-
+        /// <summary>Most recent non-anonymous, non-local label. Used to identify current scope for local labels.</summary>
         protected Identifier MostRecentNamedLabel { get; private set; }
-        Identifier getMostRecentNamedLabel() {
-            return MostRecentNamedLabel;
-        }
+        /// <summary>Collection of named values.</summary>
+        public snarfblasm.assembler.PassValuesCollection Values = new snarfblasm.assembler.PassValuesCollection();
 
         // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
 
-        //public Dictionary<string, LiteralValue> Values = new Dictionary<string, LiteralValue>(StringComparer.InvariantCultureIgnoreCase);
-        public snarfblasm.assembler.PassValuesCollection Values = new snarfblasm.assembler.PassValuesCollection();
 
         public int CurrentAddress { get; set; }
-        public int OriginOffset { get; set; }
         string _CurrentNamespace = null;
         public string CurrentNamespace {
             get { return _CurrentNamespace; }
@@ -57,8 +45,6 @@ namespace snarfblasm
                 _CurrentNamespace = Values.CurrentNamespace = value;
             }
         }
-
-        public bool OriginSet { get { return OriginOffset >= 0; } }
 
         // Todo: option to stop running the processing loop if a certain number of errors occur (probably with a default value, maybe 10)
 
@@ -99,20 +85,41 @@ namespace snarfblasm
             // todo: ensure that there are no open enums or if blocks
             // todo: throw error and stop processing if current address exceeds $FFFF
 
-            if (EmitOutput) {
-                CalculateLastPatchSegmentSize();
-            }
+            //if (EmitOutput) {
+            //    CalculateLastPatchSegmentSize();
+            //}
         }
 
         protected abstract void ProcessCurrentInstruction() ;
 
-        public abstract byte[] GetOutput();
+        /// <summary>
+        /// Can be called after a pass completes, provided it emits output, that returns an array containing all output data.
+        /// </summary>
+        /// <returns></returns>
+        public byte[] GetOutput() {
+            // Get a list of all segments that can have output, in the order they should appear in the ROM
+            List<Segment> allSegments = new List<Segment>(this.segments.Values).FindAll(seg => seg.TargetOffset != null);
+            allSegments.Sort((segA, segB) => segB.TargetOffset.Value - segA.TargetOffset.Value);
+            int totalSize = 0;
+            foreach (var seg in allSegments) totalSize += (int)seg.Output.Length;
+
+            var output = new byte[totalSize];
+            var iOutput = 0;
+            foreach (var seg in allSegments) {
+                var segOutput = seg.GetOutput();
+                Array.Copy(segOutput, 0, output, iOutput, segOutput.Length);
+                iOutput += segOutput.Length;
+            }
+
+            return output;
+        }
 
         /// <summary>
         /// If true, nothing should be written to the output stream (but behavior shold not otherwise change)
         /// </summary>
         public bool SurpressOutput { get; protected set; }
-        // Todo: get rid of current output offset
+        // Todo: get rid of current output offset. It is no longer used and deprecated
+        /// <summary>Deprecated. Do not use.</summary>
         public int CurrentOutputOffset { get; set; }
 
 
@@ -122,35 +129,39 @@ namespace snarfblasm
             if (hasORGed) {
                 int paddingAmt = address - CurrentAddress;
 
-                if (InPatchMode) {
-                    // In PATCH mode, .ORG just begins a new patch segment
-                    if (EmitOutput) {
-                        CalculateLastPatchSegmentSize();
-                        var lastPatch = PatchSegments[PatchSegments.Count - 1];
+                //if (InPatchMode) {
+                //    // Todo: Most likely, .ORG should always pad unless there is no current address
+
+                //    // In PATCH mode, .ORG just begins a new patch segment
+                //    if (EmitOutput) {
+                //        CalculateLastPatchSegmentSize();
+                //        var lastPatch = PatchSegments[PatchSegments.Count - 1];
 
 
-                        int newPatchOffset = lastPatch.PatchOffset + lastPatch.Length + (CurrentAddress - address);
-                        this.PatchSegments.Add(new PatchSegment(lastPatch.Start + lastPatch.Length, -1, newPatchOffset));
-                    }
-                    SetAddress(address);
+                //        int newPatchOffset = lastPatch.PatchOffset + lastPatch.Length + (CurrentAddress - address);
+                //        this.PatchSegments.Add(new PatchSegment(lastPatch.Start + lastPatch.Length, -1, newPatchOffset));
+                //    }
+                //    SetAddress(address);
                     
-                } else {
+                //} else {
+                //    // .ORG (except first) pads to the specified address.
+                //    if (paddingAmt < 0) {
+                //        throw new ArgumentException("Specified address is less than the current address.");
+                //    } else {
+                //        OutputBytePadding(paddingAmt, (byte)0);
+                //    }
+                //}
+
                     // .ORG (except first) pads to the specified address.
-                    if (paddingAmt < 0) {
-                        throw new ArgumentException("Specified address is less than the current address.");
-                    } else {
-                        OutputBytePadding(paddingAmt, (byte)0);
-                    }
+                if (paddingAmt < 0) {
+                    throw new ArgumentException("Specified address is less than the current address.");
+                } else {
+                    OutputBytePadding(paddingAmt, (byte)0);
                 }
             } else {
                 // First .ORG acts like a .BASE
                 SetAddress(address);
-                OriginOffset = address;
             }
-
-            // Todo: OriginOffset is probably completely unnecessary
-
-            OriginOffset = address;
 
             hasORGed = true;
         }
@@ -493,9 +504,10 @@ namespace snarfblasm
         /// <summary>
         /// Writes a byte to the output stream. If there is no output stream
         /// or SurpressOutput is true, the call is ignored (no errors will occur).
+        /// DOES NOT AFFECT CurrentAddress.
         /// </summary>
         /// <param name="b"></param>
-        public abstract void WriteByte(byte b);
+        public abstract void WriteByte(byte b); // Todo: why does this not affect CurrentAddress? Address is manually updated elsewhere when this is called. Seems roundabout and error prone.
 
         /// <summary>
         /// Writes padding to the output stream.  If there is no output stream
@@ -511,7 +523,7 @@ namespace snarfblasm
         /// <summary>
         /// Gets the stream that output is written to (if applicable). This stream should not be written to while SurpressOutput is true.
         /// </summary>
-        public Stream OutputStream { get; protected set; }
+        public Stream OutputStream { get; protected set; } // Todo: private set. stream set  by selectin segment
 
 
         /// <summary>
@@ -519,71 +531,145 @@ namespace snarfblasm
         /// .PATCH without a .ORG in between should cause an error since there is no origin.
         /// </summary>
         public void ResetOrigin() {
-            OriginOffset = int.MinValue;
             hasORGed = false;
         }
 
         #region PATCH directive stuffs
-        List<PatchSegment> PatchSegments = new List<PatchSegment>();
+        //List<PatchSegment> PatchSegments = new List<PatchSegment>();
+        // Todo: make this private
+        protected Dictionary<string, Segment> segments = new Dictionary<string, Segment>(StringComparer.OrdinalIgnoreCase);
+        // Todo: make this private
+        protected Segment currentSegment;
+
 
         public bool InPatchMode { get; private set; }
 
+        ///// <summary>
+        ///// Specifies the offset that the following code will be patched to. See remarks.
+        ///// </summary>
+        ///// <remarks>Once a patch offset is applied, any following code will be in "patch mode." .ORG directives will
+        ///// not pad. Instead, a .ORG will begin a new patch section.</remarks>
+        //public void SetPatchOffset(int offset) {
+        //    // Todo: need to be able to create .PATCHes with bank/offset locations
+        //    EnablePatchMode();
+
+        //    ResetOrigin();
+
+        //    //if (EmitOutput) {
+        //    //    CalculateLastPatchSegmentSize();
+
+        //    //    // Add a new patch segment
+        //    //    PatchSegments.Add(new PatchSegment((int)OutputStream.Length, -1, offset));
+        //    //}
+        //    var newSegment = new Segment(new SegmentTarget(offset));
+        //    var newSegmentName = "_anon_seg_" + anonymousSegmentIndex + "_";
+        //    anonymousSegmentIndex++;
+        //    this.segments.Add(newSegmentName, newSegment);
+        //    this.SelectSegment(newSegmentName);
+        //}
+
+        int anonymousSegmentIndex = 0;
         /// <summary>
-        /// Specifies the address that the following code will be patched to. See remarks.
+        /// This function is to support the .PATCH segment as a simplified/legacy alternative to .SEGMENT.
+        /// Adds the segment and selects it.
         /// </summary>
-        /// <remarks>Once a patch offset is applied, any following code will be in "patch mode." .ORG directives will
-        /// not pad. Instead, a .ORG will begin a new patch section.</remarks>
-        public void SetPatchOffset(int offset) {
-            OnSetPatchOffset(offset);
+        public void EnterPatchSegment(Segment patchSeg) {
+            // Todo: need to be able to create .PATCHes with bank/offset locations
+            EnablePatchMode();
 
-            ResetOrigin();
 
-            if (EmitOutput) {
-                CalculateLastPatchSegmentSize();
+            //if (EmitOutput) {
+            //    CalculateLastPatchSegmentSize();
 
-                // Add a new patch segment
-                PatchSegments.Add(new PatchSegment((int)OutputStream.Length, -1, offset));
-            }
+            //    // Add a new patch segment
+            //    PatchSegments.Add(new PatchSegment((int)OutputStream.Length, -1, offset));
+            //}
+            //var newSegment = new Segment(new SegmentTarget(offset));
+            var newSegmentName = "_anon_seg_" + anonymousSegmentIndex + "_";
+            anonymousSegmentIndex++;
+            this.segments.Add(newSegmentName, patchSeg);
+            this.SelectSegment(newSegmentName);
         }
 
-        /// <summary>
-        /// Computes length of the most recently added patch segment. SEE REMARKS
-        /// </summary>
-        /// <remarks>It is assumed that the last patch extends to the end of the code stream.</remarks>
-        /// <returns></returns>
-        private void CalculateLastPatchSegmentSize() {
-            // 
-
-            if (EmitOutput) {
-                var lastPatch = PatchSegments[PatchSegments.Count - 1];
-                int streamSize = (int)OutputStream.Length;
-                int patchLen = streamSize - lastPatch.Start;
-                PatchSegments[PatchSegments.Count - 1] = new PatchSegment(lastPatch.Start, patchLen, lastPatch.PatchOffset);
-            } else {
-                throw new InvalidOperationException("CalculateLastPatchSegmentSize() not valid on a pass that does not emit output.");
+        protected void SelectSegment(string segName) {
+            if (this.currentSegment != null) {
+                this.currentSegment.CurrentAddress = this.CurrentAddress;
             }
+
+            // Todo: meaningful error message. likely via a name verification in seg selection directive.
+            this.currentSegment = this.segments[segName];
+            this.OutputStream = this.currentSegment.Output;
+
+            var segAddress = this.currentSegment.CurrentAddress ?? this.currentSegment.Base;
+            if(segAddress == null) {
+                ResetOrigin();
+            }else{
+                this.CurrentAddress = segAddress.Value;
+            }
+
+            OnSegmentSelected(segName, this.currentSegment);
         }
 
+        protected abstract void OnSegmentSelected(string name, Segment segment);
+
+        ///// <summary>
+        ///// Computes length of the most recently added patch segment. SEE REMARKS
+        ///// </summary>
+        ///// <remarks>It is assumed that the last patch extends to the end of the code stream.</remarks>
+        ///// <returns></returns>
+        //private void CalculateLastPatchSegmentSize() {
+        //    // 
+
+        //    if (EmitOutput) {
+        //        var lastPatch = PatchSegments[PatchSegments.Count - 1];
+        //        int streamSize = (int)OutputStream.Length;
+        //        int patchLen = streamSize - lastPatch.Start;
+        //        PatchSegments[PatchSegments.Count - 1] = new PatchSegment(lastPatch.Start, patchLen, lastPatch.PatchOffset);
+        //    } else {
+        //        throw new InvalidOperationException("CalculateLastPatchSegmentSize() not valid on a pass that does not emit output.");
+        //    }
+        //}
+
         /// <summary>
-        /// Inheritors can call this method if necessary.
+        /// Prompts the assembler to generate a patch file instead of a plain binary file
         /// </summary>
         /// <param name="offset"></param>
-        protected virtual void OnSetPatchOffset(int offset) {
+        protected void EnablePatchMode() {
+            // Todo: this will need to be replaced with something segment friendly
             InPatchMode = true;
         }
 
+        // Todo: rename AddDefaultSegment
         private void AddDefaultPatch() {
-            PatchSegments.Add(new PatchSegment(0, -1, -1));
+            //PatchSegments.Add(new PatchSegment(0, -1, -1));
+            //SetPatchOffset(0); // Todo: verify this makes sense
+            var defaultSeg = new Segment(0);
+            EnterPatchSegment(defaultSeg);
         }
 
         public IList<PatchSegment> GetPatchSegments() {
-            for (int i = PatchSegments.Count - 1; i >= 0; i--) {
-                if (PatchSegments[i].Length == 0 && PatchSegments.Count > 1) {
-                    PatchSegments.RemoveAt(i);
-                }
+            //for (int i = PatchSegments.Count - 1; i >= 0; i--) {
+            //    if (PatchSegments[i].Length == 0 && PatchSegments.Count > 1) {
+            //        PatchSegments.RemoveAt(i);
+            //    }
+            //}
+
+            //return PatchSegments;
+
+            // Todo: this assumes that GetOutput will return segments in order. While this is true, it's not contractually obligated. Probably not a concern since segments are replacing patches anyways, but imma leave dis note to be safe.
+
+            // Get a list of all segments that have output, in the order they should appear in the ROM
+            List<Segment> allSegments = new List<Segment>(this.segments.Values).FindAll(seg => seg.TargetOffset != null && seg.Output.Length > 0);
+            allSegments.Sort((segA, segB) => segB.TargetOffset.Value - segA.TargetOffset.Value);
+
+            List<PatchSegment> result = new List<PatchSegment>();
+            int iOutput = 0;
+            foreach (var seg in allSegments) {
+                result.Add(new PatchSegment(iOutput, (int)seg.Output.Length, seg.TargetOffset.Value));
+                iOutput += (int)seg.Output.Length;
             }
 
-            return PatchSegments;
+            return result;
         }
       
         #endregion
@@ -677,10 +763,13 @@ namespace snarfblasm
         }
 
 
-
-        public override byte[] GetOutput() {
-            throw new NotImplementedException();
+        protected override void OnSegmentSelected(string name, Segment segment) {
+            // do nothing
         }
+
+        //public override byte[] GetOutput() {
+        //    throw new NotImplementedException();
+        //}
 
         public override void OutputBytePadding(int paddingAmt, byte fillValue) {
             CurrentAddress += paddingAmt;
@@ -699,19 +788,29 @@ namespace snarfblasm
 
     class SecondPass : Pass
     {
+        public const string defaultSegmentName = "#default#";
         public SecondPass(Assembler asm)
             : base(asm) {
             EmitOutput = true;
             AllowOverflowErrors = true;
             ErrorOnUndefinedSymbol = true;
 
-            base.OutputStream = this.outputStream;
+            //base.OutputStream = this.outputStream;
+            var defaultSeg =  new Segment(0);
+            segments.Add(defaultSegmentName, defaultSeg);
+            SelectSegment(defaultSegmentName);
         }
 
-        MemoryStream outputStream = new MemoryStream();
-        byte[] output;
-        public override byte[] GetOutput() {
-            return output;
+        //Stream _OutputStream = new MemoryStream();
+
+        
+        
+        //public override byte[] GetOutput() {
+        //    return output;
+        //}
+
+        protected override void OnSegmentSelected(string name, Segment segment) {
+            // Todo: does anything need to happen here?
         }
 
         protected override void BeforePerformPass() {
@@ -723,24 +822,13 @@ namespace snarfblasm
         }
         ////protected override void PerformPass() {
 
-        ////    for (iCurrentInstruction = 0; iCurrentInstruction < Assembly.ParsedInstructions.Count; iCurrentInstruction++) {
-        ////        ProcessPendingLabelsAndDirectives();
-
-        ////        ProcessCurrentInstruction();
-        ////    }
-
-        ////    // Process any remaining directives (those that come after the last instruction)
-        ////    iCurrentInstruction = int.MaxValue - 1;
-        ////    ProcessPendingLabelsAndDirectives();
-
-
-        ////}
         protected override void AfterPerformPass() {
             base.AfterPerformPass();
 
-
-            output = outputStream.ToArray();
-            outputStream = null;
+            
+            // no longer necessary
+            //// output = _OutputStream.ToArray();
+            ////_OutputStream = null;
 
         }
 
@@ -751,7 +839,7 @@ namespace snarfblasm
             var currentLine = Assembly.ParsedInstructions[iCurrentInstruction];
 
             if(!SurpressOutput)
-                outputStream.WriteByte(currentLine.opcode);
+                OutputStream.WriteByte(currentLine.opcode);
 
             var addressing = Opcode.allOps[currentLine.opcode].addressing;
             switch (addressing) {
@@ -768,8 +856,8 @@ namespace snarfblasm
                     ushort operand16 = GetOperand(currentLine, out error);
                     if (error.Code == ErrorCode.None) {
                         if (!SurpressOutput) {
-                            outputStream.WriteByte((byte)(operand16 & 0xFF));
-                            outputStream.WriteByte((byte)(operand16 >> 8));
+                            OutputStream.WriteByte((byte)(operand16 & 0xFF));
+                            OutputStream.WriteByte((byte)(operand16 >> 8));
                         }
 
                         CurrentAddress += 3;
@@ -797,7 +885,7 @@ namespace snarfblasm
                             AddError(error);
                         }
                         if (!SurpressOutput)
-                            outputStream.WriteByte((byte)(operand8 & 0xFF));
+                            OutputStream.WriteByte((byte)(operand8 & 0xFF));
 
                         CurrentAddress += 2;
                         CurrentOutputOffset += 2;
@@ -817,7 +905,7 @@ namespace snarfblasm
                             AddError(error);
                         }
                         if (!SurpressOutput)
-                            outputStream.WriteByte((byte)operandRel);
+                            OutputStream.WriteByte((byte)operandRel);
 
                         CurrentAddress += 2;
                         CurrentOutputOffset += 2;
@@ -880,15 +968,6 @@ namespace snarfblasm
         }
 
 
-        ////private static void ThrowOperandOutOfRangeException(int operandRel, int sourceLine) {
-        ////    int outOfRangeAmt;
-        ////    if (operandRel < 0)
-        ////        outOfRangeAmt = Math.Abs(operandRel + 128);
-        ////    else
-        ////        outOfRangeAmt = Math.Abs(operandRel - 127);
-        ////    throw new OperandOutOfRangeException("Operand is out of range (by " + outOfRangeAmt.ToString("X") + ")", sourceLine);
-        ////}
-
         protected override void ProcessCurrentLabel() {
             base.ProcessCurrentLabel();
 
@@ -911,13 +990,13 @@ namespace snarfblasm
 
         public override void WriteByte(byte b) {
             if (!SurpressOutput)
-                outputStream.WriteByte(b);
+                OutputStream.WriteByte(b);
         }
 
         public override void OutputBytePadding(int paddingAmt, byte fillValue) {
             if (!SurpressOutput) {
                 for (int i = 0; i < paddingAmt; i++) {
-                    outputStream.WriteByte(fillValue);
+                    OutputStream.WriteByte(fillValue);
                 }
             }
 
@@ -928,8 +1007,8 @@ namespace snarfblasm
         public override void OutputWordPadding(int wordCount, ushort fillValue) {
             if (!SurpressOutput) {
                 for (int i = 0; i < wordCount; i++) {
-                    outputStream.WriteByte((byte)fillValue);
-                    outputStream.WriteByte((byte)(fillValue >> 8));
+                    OutputStream.WriteByte((byte)fillValue);
+                    OutputStream.WriteByte((byte)(fillValue >> 8));
                 }
             }
 

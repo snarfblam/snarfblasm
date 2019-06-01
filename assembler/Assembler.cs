@@ -288,4 +288,56 @@ namespace Romulus
         public int PatchOffset { get; private set; }
 
     }
+
+}
+
+namespace snarfblasm
+{
+    internal class Segment
+    {
+        public Segment(int? targetOffset) {
+            this.TargetOffset = targetOffset;
+            if (targetOffset != null) this._Output = new MemoryStream();
+        }
+
+
+        // Config
+        public int? Bank { get; set; }
+        public ushort? Base { get; set; }
+        public string Namespace { get; set; }
+        public int? MaxSize { get; set; }
+        public ushort? AddressLimit { get; set; }
+        public LiteralValue? Padding { get; set; }
+        /// <summary>Location in ROM to write to, or null if this segment does not generate output</summary>
+        public int? TargetOffset { get; private set; }
+
+        // State
+        /// <summary>Gets/sets the current address of the segment. Only valid when the segment is not selected.</summary>
+        public int? CurrentAddress { get; set; }
+
+        public bool GeneratesOutput { get { return TargetOffset != null; } }
+
+        MemoryStream _Output;
+        public Stream Output { get { return _Output; } }
+
+        /// <summary>
+        /// Creates a new array containing the segment output.
+        /// </summary>
+        public byte[] GetOutput() {
+            return _Output.ToArray();
+        }
+
+    }
+
+
+    /////// <summary>Enumerates different ways a segment's output location may be specified</summary>
+    ////public enum SegmentTargetType
+    ////{
+    ////    /// <summary>A SegmentOutput will not produce any actual output</summary>
+    ////    None,
+    ////    /// <summary>A SegmentOutput produces output at a specific address in a specific bank</summary>
+    ////    Address,
+    ////    /// <summary>A SegmentOutput produces output at a specified offset in the resultant file</summary>
+    ////    Offset
+    ////}
 }

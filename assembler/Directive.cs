@@ -253,10 +253,11 @@ class ErrorDirective : Directive
         }
 
 
-
-        public int PatchOffset { get; set; }
-        public int Bank { get; set; }
-        int PatchOrigin { get; set; }
+        /// <summary>The offset this patch will be written to.</summary>
+        public int PatchOffset { get; private set; }
+        public int Bank { get; private set; }
+        /// <summary>The base address of this patch.</summary>
+        public int PatchOrigin { get; private set; }
 
         public override void Process(Pass pass, out Error error) {
             error = Error.None;
@@ -264,12 +265,17 @@ class ErrorDirective : Directive
             if (PatchOffset < 0) {
                 pass.Assembler.AddError(new Error(ErrorCode.Invalid_Directive_Value, Error.Msg_InvalidPatchOffset, SourceLine));
             } else {
-                if (PatchOrigin >= 0) {
-                    pass.SetOrigin(PatchOrigin);
-                }
-                if (Bank >= 0)
-                    pass.Bank = Bank;
-                pass.SetPatchOffset(PatchOffset);
+                //if (PatchOrigin >= 0) {
+                //    pass.SetOrigin(PatchOrigin);
+                //}
+                //if (Bank >= 0)
+                //    pass.Bank = Bank;
+                //pass.SetPatchOffset(PatchOffset);
+                Segment patchSeg = new Segment(PatchOffset);
+                if (PatchOrigin >= 0) patchSeg.Base = (ushort)PatchOrigin;
+                if (Bank >= 0) patchSeg.Bank = Bank;
+
+                pass.EnterPatchSegment(patchSeg);
             }
 
         }

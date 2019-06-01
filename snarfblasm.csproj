@@ -67,6 +67,7 @@
     <Compile Include="assembler\ExpressionEvaluator.cs" />
     <Compile Include="assembler\ExpressionOperators.cs" />
     <Compile Include="assembler\LineManager.cs" />
+    <Compile Include="assembler\NesRom.cs" />
     <Compile Include="assembler\Opcode.cs" />
     <Compile Include="assembler\ParseException.cs" />
     <Compile Include="assembler\Parser.cs" />
@@ -98,6 +99,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="fisknotes.txt" />
     <Content Include="README.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
