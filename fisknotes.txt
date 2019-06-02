@@ -1,0 +1,50 @@
+﻿[4:10 AM] Fiskbit: Bugs:
+- Colons for labels seem to be optional, whether using -COLON:ON or OFF. I'd like to require colons to help catch typos.
+- While garbage after a label usually results in "Unexpected Text: Could not parse the line.", if that garbage is an immediate ("SUB #$03"), it's ignored.
+- The following causes a crash: AND #($01
+- Assigning to a fixed label ("Foo := 0", later "Foo = 1") crashes with a note that this should throw an actual assembler error.
+
+[4:10 AM] Fiskbit: Things I really want:
+- Being able to make labels that are immediates. For example, I want to say "kFoo := #$00" and have "LDA kFoo" mean "LDA #$00" (and still have ".db kFoo" mean ".db $00"). Adding an address and an immediate should result in an address. Right now, I have to remember to put # in front of any label whose value is intended to be an immediate ("kFoo = $00", "LDA #kFoo"), which seems easy to mess up.
+- AS-style local label names. These are labels consisting of just a number ("1:"), and are referred to by that number suffixed with 'f' to look forward or 'b' to look backward for the first instance (eg "BNE 1f", "JMP 3b", "LDA 1b+1,Y"). I love using these with x86 and find that it makes adding or removing branch targets easier and less dangerous than either option in snarfblasm. GAS documentation contains some implementation details here under "Local Symbol Names": ftp://ftp.gnu.org/old-gnu/Manuals/gas/html_chapter/as_5.html
+[4:10 AM] Fiskbit: Nice-to-haves:
+- A .ELSEIF directive.
+- Some way to have .ERROR print out values. Figuring out exactly how I've failed one of my conditions can be challenging (such as when a function is too long and I need to know by how many bytes), and it's easy for condition values and error message values to desync, such as with:
+  dFooTable:
+    .INCBIN foo
+    .IF $ - dFooTable != #$10
+    .ERROR foo is wrong size (must be #$10 bytes).
+    .ENDIF
+- Some kind of .PAD directive. My assembly contains a lot of things like this, which verifies we haven't gone too far and then fills in the space in between, and I'd love to be able to condense them into a smaller, cleaner, and less error-prone form:
+  .IF $ > $B46E
+  .ERROR Exceeded allocated region.
+  .ENDIF
+  .IF $ < $B46E
+    ; Freed space.
+    .dsb $B46E - $, $00  ; BRK.
+  .ENDIF
+- Scoping (like a namespace). I would love a way to be able to create a scope (named, preferably) in which I can create/use scoped labels that begin with @, and have some way to refer to these labels outside the scope so that things like arguments to functions within the scope (ie local variables that need to be set by the caller) can still be referenced outside.
+- Line continuations with backslash? That is, being able to end a line in a backslash to continue onto the next, for formatting long math (eg OR'ing together many flags). I have this implemented into my very-WIP assembler as only applying if not in a comment and without any non-whitespace following the character on the same line.
+[4:16 AM] Fiskbit: Alongside my Zelda hack, I've been making a commented disassembly that I intend to make into a full source code conversion. I've been targeting a hypothetical future assembler that has those scoping and local label features. I'd been planning on doing the assembler with these features myself after finishing up the hack and have a partial implementation that I've shelved until then, though I don't totally know what I'm doing yet in the area of code compilation! I just wasn't happy with the features available in current assemblers as far as code styling goes.
+[6:56 AM] Fiskbit: In snarfblasm, I'd expect to be able to specify the location in the output file with .org and the location in the address space with .base, but if I have a later .org with a value lower than the .base value, I get "Invalid Org: .ORG address can not be less than the current address."
+[6:56 AM] Fiskbit: I'm quite perplexed by this behavior and don't know how to get it to do what I want.
+[7:05 AM] Fiskbit: I was able to produce the binary I wanted by using .dsb targetaddr - $, $00, so at least there's a workaround, but using directives to get directly at the address seems a lot more intuitive to me. I wonder if I'm totally misunderstanding how this is normally done.
+[10:04 AM] snarfblam: Different assemblers behave different here, and snarfblasm follows ASM6 behavior. You can use successive .orgs, but they need to be in sequence and padding is inserted in the spaces between.
+[10:05 AM] snarfblam: .patch should offer the behavior you're looking for
+[10:06 AM] snarfblam: You can either specify $offset or bank:address
+[10:08 AM] snarfblam: In the case of $offset, you'll want to follow it with a .base. In the case of bank:address, well it uses the address you just gave it.
+[4:11 PM] Fiskbit: I've been using .patch for my hack to put things at very specific locations without worrying about what's in the middle, and I get an IPS patch outputted when I assemble. Here, I'm wanting a binary where the space in between is padded out. Makes sense that .org can't have decreasing addresses, but I guess the surprise to me is that .base influences this. The .dsb trick solves my problem, though, so I guess I'm good!
+[4:11 PM] Fiskbit: And thanks, again, for this assembler. I do quite like it. The .patch directive in particular is excellent.
+[5:22 PM] Fiskbit:
+Attachment file type: unknown
+Z1M1poc2.nes
+512.02 KB
+[7:59 PM] Fiskbit: Interesting; hadn't seen this snarfblasm error before and haven't figured out what it means yet:
+Unhandled Exception: System.ArgumentException: The specified line number could not be traced back to a specific source file.
+   at snarfblasm.LineManager.GetSourceLocation(Int32 iSourceLine, Int32& lineIndex, String& file)
+   at snarfblasm.Assembler.CreateErrorListing()
+   at snarfblasm.Assembler.Assemble()
+   at snarfblasm.Program.RunAssembler()
+   at snarfblasm.Program.Main(String[] args)
+[8:01 PM] Fiskbit: Oh, the source I had converted had a * in it instead of a $: .dsb $FFFA - *
+[1:37 AM] Fiskbit: If I .incbin the same file twice, snarfblasm fails because the file is already open.

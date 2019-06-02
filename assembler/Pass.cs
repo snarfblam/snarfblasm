@@ -44,6 +44,22 @@ namespace snarfblasm
                 _CurrentNamespace = Values.CurrentNamespace = value;
             }
         }
+
+        public AssemblyData Assembly { get; private set; }
+        public Assembler Assembler { get; private set; }
+
+        /// <summary>Index of the next label that is to be processed.</summary>
+        public int iNextLabel;
+        /// <summary>Index of the instruction that the next label (referenced by iNextLabel) precedes.</summary>
+        public int NextLabel_iInstruction;
+        /// <summary>Index of the next directive that is to be processed.</summary>
+        public int iNextDirective;
+        /// <summary>Index of the instruction that the next directive (referenced by iNextDirective) precedes.</summary>
+        public int NextDirective_iInstruction;
+        /// <summary>Index of the next instruction to process.</summary>
+        public int iCurrentInstruction;
+
+
         /// <summary>If true, nothing is to be written to the output stream. The assembler will otherwise function as normal
         /// (e.g. address will increase as instructions are processed).</summary>
         public bool SurpressOutput { get; protected set; }
@@ -55,6 +71,16 @@ namespace snarfblasm
         public bool ErrorOnUndefinedSymbol { get; protected set; }
         public bool AllowOverflowErrors { get; protected set; }
 
+        //List<PatchSegment> PatchSegments = new List<PatchSegment>();
+        // Todo: make this private
+        private Dictionary<string, Segment> segments = new Dictionary<string, Segment>(StringComparer.OrdinalIgnoreCase);
+        // Todo: make this private
+        protected Segment currentSegment;
+
+        public bool InPatchMode { get; private set; }
+
+        int anonymousSegmentIndex = 0;
+
 
         // Todo: what happens when address is FFFF and data is written? (Should currentaddress verify, and maybe add an error?)
         // Todo: option to stop running the processing loop if a certain number of errors occur (probably with a default value, maybe 10)
@@ -62,7 +88,7 @@ namespace snarfblasm
         public void RunPass() {
             if (Assembly == null) throw new InvalidOperationException("Must specify assembly before calling PerformPass.");
 
-            PrepNextPointers();
+            InitializeLabelAndDirectivePointers();
             
             BeforePerformPass();
             PerformPass();
@@ -71,8 +97,6 @@ namespace snarfblasm
 
         protected virtual void AfterPerformPass() { }
         protected virtual void BeforePerformPass() { }
-
-
 
 
         private void PerformPass() {
@@ -382,9 +406,9 @@ namespace snarfblasm
         #endregion
 
         /// <summary>
-        /// Sets up pointers for the next label and next directive.
+        /// Initializes pointers for the next label and next directive.
         /// </summary>
-        private void PrepNextPointers() {
+        private void InitializeLabelAndDirectivePointers() {
             if (Assembly.Labels.Count > 0) {
                 iNextLabel = 0;
                 NextLabel_iInstruction = Assembly.Labels[0].iInstruction;
@@ -398,10 +422,6 @@ namespace snarfblasm
                 Set_NoDirectives();
             }
         }
-
-        public AssemblyData Assembly { get; private set; }
-        public Assembler Assembler { get; private set; }
-
 
         protected void AddError(Error error) {
             Assembler.AddError(error);
@@ -461,13 +481,6 @@ namespace snarfblasm
             }
         }
 
-        public int iNextLabel;
-        public int NextLabel_iInstruction;
-        public int iNextDirective;
-        public int NextDirective_iInstruction;
-
-        public int iCurrentInstruction;
-
         void Set_NoLabels() {
             iNextLabel = -1;
             NextLabel_iInstruction = Int32.MaxValue;
@@ -493,7 +506,7 @@ namespace snarfblasm
                 NextDirective_iInstruction = Assembly.Directives[iNextDirective].InstructionIndex;
             }
         }
-        // --------------------------------------------- <--This is a line.
+
 
         /// <summary>
         /// Writes a byte to the output stream. If there is no output stream
@@ -529,40 +542,7 @@ namespace snarfblasm
         }
 
         #region PATCH directive stuffs
-        //List<PatchSegment> PatchSegments = new List<PatchSegment>();
-        // Todo: make this private
-        protected Dictionary<string, Segment> segments = new Dictionary<string, Segment>(StringComparer.OrdinalIgnoreCase);
-        // Todo: make this private
-        protected Segment currentSegment;
 
-
-        public bool InPatchMode { get; private set; }
-
-        ///// <summary>
-        ///// Specifies the offset that the following code will be patched to. See remarks.
-        ///// </summary>
-        ///// <remarks>Once a patch offset is applied, any following code will be in "patch mode." .ORG directives will
-        ///// not pad. Instead, a .ORG will begin a new patch section.</remarks>
-        //public void SetPatchOffset(int offset) {
-        //    // Todo: need to be able to create .PATCHes with bank/offset locations
-        //    EnablePatchMode();
-
-        //    ResetOrigin();
-
-        //    //if (EmitOutput) {
-        //    //    CalculateLastPatchSegmentSize();
-
-        //    //    // Add a new patch segment
-        //    //    PatchSegments.Add(new PatchSegment((int)OutputStream.Length, -1, offset));
-        //    //}
-        //    var newSegment = new Segment(new SegmentTarget(offset));
-        //    var newSegmentName = "_anon_seg_" + anonymousSegmentIndex + "_";
-        //    anonymousSegmentIndex++;
-        //    this.segments.Add(newSegmentName, newSegment);
-        //    this.SelectSegment(newSegmentName);
-        //}
-
-        int anonymousSegmentIndex = 0;
         /// <summary>
         /// This function is to support the .PATCH segment as a simplified/legacy alternative to .SEGMENT.
         /// Adds the segment and selects it.
@@ -583,6 +563,11 @@ namespace snarfblasm
             anonymousSegmentIndex++;
             this.segments.Add(newSegmentName, patchSeg);
             this.SelectSegment(newSegmentName);
+        }
+
+        protected void AddSegment(string segName, Segment seg) {
+            if (segments.ContainsValue(seg)) throw new ArgumentException("Duplicate segment.");
+            this.segments.Add(segName, seg);
         }
 
         protected void SelectSegment(string segName) {
@@ -606,23 +591,7 @@ namespace snarfblasm
 
         protected abstract void OnSegmentSelected(string name, Segment segment);
 
-        ///// <summary>
-        ///// Computes length of the most recently added patch segment. SEE REMARKS
-        ///// </summary>
-        ///// <remarks>It is assumed that the last patch extends to the end of the code stream.</remarks>
-        ///// <returns></returns>
-        //private void CalculateLastPatchSegmentSize() {
-        //    // 
-
-        //    if (EmitOutput) {
-        //        var lastPatch = PatchSegments[PatchSegments.Count - 1];
-        //        int streamSize = (int)OutputStream.Length;
-        //        int patchLen = streamSize - lastPatch.Start;
-        //        PatchSegments[PatchSegments.Count - 1] = new PatchSegment(lastPatch.Start, patchLen, lastPatch.PatchOffset);
-        //    } else {
-        //        throw new InvalidOperationException("CalculateLastPatchSegmentSize() not valid on a pass that does not emit output.");
-        //    }
-        //}
+      
 
         /// <summary>
         /// Prompts the assembler to generate a patch file instead of a plain binary file
@@ -642,13 +611,6 @@ namespace snarfblasm
         }
 
         public IList<PatchSegment> GetPatchSegments() {
-            //for (int i = PatchSegments.Count - 1; i >= 0; i--) {
-            //    if (PatchSegments[i].Length == 0 && PatchSegments.Count > 1) {
-            //        PatchSegments.RemoveAt(i);
-            //    }
-            //}
-
-            //return PatchSegments;
 
             // Todo: this assumes that GetOutput will return segments in order. While this is true, it's not contractually obligated. Probably not a concern since segments are replacing patches anyways, but imma leave dis note to be safe.
 

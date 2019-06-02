@@ -30,7 +30,9 @@ namespace snarfblasm
                 iSpan--;
             }
 
-            throw new ArgumentException("The specified line number could not be traced back to a specific source file.");
+            lineIndex = 0;
+            file = "-";
+            //throw new ArgumentException("The specified line number could not be traced back to a specific source file.");
 
             // Todo: Need to be able to return multiple source locations for macro: the line number the macro is invoked on, and the line within the macro that the error occured on (recursively for macros-in-macros)
             // i.e. Error: game.asm#clearRam#resetRegister(2) Instruction Error: Invalid Addressing Mode
