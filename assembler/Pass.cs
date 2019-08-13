@@ -445,9 +445,7 @@ namespace snarfblasm
                 }
 
                 if (labelPending) {
-                    if (!InExcludedCode) {
-                        ProcessCurrentLabel();
-                    }
+                    ProcessCurrentLabel();
                     NextLabel();
                 } else if (directivePending) {
                     // If we are in excluded code, only conditional directives are processed.
@@ -460,12 +458,16 @@ namespace snarfblasm
             } while (doMoreThings);
         }
 
+        /// <summary>Process the current label, taking into consideration the assembler state with regards to code exclusion (.if blocks)</summary>
         protected virtual void ProcessCurrentLabel() {
             var label = Assembly.Labels[iNextLabel];
-            bool isAnon = label.name[0] == '~';
+            
+            if (!InExcludedCode) {
+                bool isAnon = label.name[0] == '~';
 
-            if (!label.local && !isAnon) {
-                MostRecentNamedLabel = label.GetName();
+                if (!label.local && !isAnon) {
+                    MostRecentNamedLabel = label.GetName();
+                }
             }
         }
 
@@ -570,7 +572,18 @@ namespace snarfblasm
             this.segments.Add(segName, seg);
         }
 
-        protected void SelectSegment(string segName) {
+        /// <summary>
+        /// Selects specified segment. If the segment does not exist, 
+        /// </summary>
+        /// <param name="segName"></param>
+        /// <returns></returns>
+        public bool SelectSegment(string segName) {
+            Segment newSeg;
+            if (!segments.TryGetValue(segName, out newSeg)) {
+                return false;
+            }
+            
+            
             if (this.currentSegment != null) {
                 this.currentSegment.CurrentAddress = this.CurrentAddress;
             }
@@ -587,6 +600,7 @@ namespace snarfblasm
             }
 
             OnSegmentSelected(segName, this.currentSegment);
+            return true;
         }
 
         protected abstract void OnSegmentSelected(string name, Segment segment);
@@ -691,24 +705,33 @@ namespace snarfblasm
             base.ProcessCurrentLabel();
 
             var label = Assembly.Labels[iNextLabel];
-
-            label.address = (ushort)CurrentAddress;
-            label.nspace = CurrentNamespace;
-            Assembly.Labels[iNextLabel] = label;
-
-            bool isAnonymous = label.name[0] == '~';
-            if (isAnonymous) {
-                Assembly.AnonymousLabels.ResolveNextPointer((ushort)CurrentAddress);
+            if (InExcludedCode) {
+                label.voided = true;
+                Assembly.Labels[iNextLabel] = label;
+                bool isAnonymous = label.name[0] == '~';
+                if (isAnonymous) {
+                    Assembly.AnonymousLabels.VoidNextPointer();
+                }
             } else {
-                var lblName = label.GetName();
-                if (Values.NameExists(lblName)) {
-                    AddError(new Error(ErrorCode.Value_Already_Defined, string.Format(Error.Msg_ValueAlreadyDefined_name, label.name), label.SourceLine));
+
+                label.address = (ushort)CurrentAddress;
+                label.nspace = CurrentNamespace;
+                Assembly.Labels[iNextLabel] = label;
+
+                bool isAnonymous = label.name[0] == '~';
+                if (isAnonymous) {
+                    Assembly.AnonymousLabels.ResolveNextPointer((ushort)CurrentAddress);
                 } else {
-                    bool isFixedError; // Todo: handle this  (ummmm...don't know what this even is anymore)
-                    if (label.address < 0x100) {
-                        Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, true), true, out isFixedError);
+                    var lblName = label.GetName();
+                    if (Values.NameExists(lblName)) {
+                        AddError(new Error(ErrorCode.Value_Already_Defined, string.Format(Error.Msg_ValueAlreadyDefined_name, label.name), label.SourceLine));
                     } else {
-                        Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, false), true, out isFixedError);
+                        bool isFixedError; // Todo: handle this  (ummmm...don't know what this even is anymore)
+                        if (label.address < 0x100) {
+                            Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, true), true, out isFixedError);
+                        } else {
+                            Values.SetValue(lblName, new LiteralValue((ushort)CurrentAddress, false), true, out isFixedError);
+                        }
                     }
                 }
             }
@@ -749,7 +772,7 @@ namespace snarfblasm
             ErrorOnUndefinedSymbol = true;
 
             var defaultSeg =  new Segment(0);
-            segments.Add(defaultSegmentName, defaultSeg);
+            AddSegment(defaultSegmentName, defaultSeg);
             SelectSegment(defaultSegmentName);
         }
         
@@ -872,7 +895,9 @@ namespace snarfblasm
         private void LoadLabelValues() {
             bool isFixedError; // Todo: handle this
             foreach (var label in Assembly.Labels) {
-                Values.SetValue(label.GetName(), new LiteralValue((ushort)label.address, false),true,out isFixedError);
+                if (!label.voided) {
+                    Values.SetValue(label.GetName(), new LiteralValue((ushort)label.address, false), true, out isFixedError);
+                }
             }
         }
 
@@ -907,6 +932,8 @@ namespace snarfblasm
             // Nothing to do with labels for second pass.
             var label = Assembly.Labels[iNextLabel];
 
+            if (label.voided || InExcludedCode) return;
+
             bool isAnonymous = label.name != null && label.name.StartsWith("~");
             if (!isAnonymous) {
 
@@ -914,7 +941,7 @@ namespace snarfblasm
                     // RAM
                     Assembler.AddDebugLabel(-1, CurrentAddress, label.name);
                 }
-                if(Bank >= 0 ){
+                if (Bank >= 0) {
                     // ROM
                     Assembler.AddDebugLabel(Bank, CurrentAddress, label.name);
                 }

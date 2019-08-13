@@ -1,7 +1,13 @@
-﻿Features planned:
+﻿
+Features planned:
     Debug output (take from Editroid)
     Error message expansion (could look something like ".Error This data exceeded its buffer by {$ - bufferEnd} byte(s)"
     Non-error message output (e.g. .Message and/or .Warning)
+    Remove undotted directives and uncoloned labels entirely.
+    Error on overlapping segments
+
+Bugs to fix:
+    Indentation of an .include can allegedly cause an error
     
 Segments:
     Segments become a superset of .PATCHes    

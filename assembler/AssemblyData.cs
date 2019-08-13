@@ -159,6 +159,7 @@ namespace snarfblasm
             this.address = 0;
             this.local = local;
             this.nspace = @namespace;
+            this.voided = false;
         }
         public NamespacedLabel(Identifier name, int location, int sourceLine, bool local) {
             this.name = name.name;
@@ -167,6 +168,7 @@ namespace snarfblasm
             this.address = 0;
             this.local = local;
             this.nspace = name.nspace;
+            this.voided = false;
         }
 
         public Identifier GetName() {
@@ -178,6 +180,9 @@ namespace snarfblasm
         public readonly int SourceLine;
         public ushort address;
         public bool local;
+
+        /// <summary>Set to true if the label declaration appears inside an excluded block of code. The label will not be </summary>
+        public bool voided;
 
     }
 

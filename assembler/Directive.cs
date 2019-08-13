@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Romulus;
+using System.Text.RegularExpressions;
 
 namespace snarfblasm
 {
@@ -116,25 +117,25 @@ class ErrorDirective : Directive
             error = Error.None;
 
             if (pass.EmitOutput) {
-                var fileStream = pass.Assembler.FileSystem.GetFileReadStream(Filename);
-                
-                byte[] buffer = new byte[0x1000];
-                int readBytes = fileStream.Read(buffer, 0, buffer.Length);
-                long totalBytesRead = readBytes;
+                using (var fileStream = pass.Assembler.FileSystem.GetFileReadStream(Filename)) {
 
-                while (readBytes > 0) {
-                    if(!pass.SurpressOutput)
-                        pass.OutputStream.Write(buffer, 0, readBytes);
+                    byte[] buffer = new byte[0x1000];
+                    int readBytes = fileStream.Read(buffer, 0, buffer.Length);
+                    long totalBytesRead = readBytes;
 
-                    readBytes = fileStream.Read(buffer, 0, buffer.Length);
-                    totalBytesRead += readBytes;
-                }
+                    while (readBytes > 0) {
+                        if (!pass.SurpressOutput)
+                            pass.OutputStream.Write(buffer, 0, readBytes);
 
+                        readBytes = fileStream.Read(buffer, 0, buffer.Length);
+                        totalBytesRead += readBytes;
+                    }
                 if (totalBytesRead != cachedFileSize) {
                     error = new Error(ErrorCode.File_Error, string.Format(Error.Msg_CantAccessFile_name, Filename), SourceLine);
                 }
 
                 pass.CurrentAddress += (int)totalBytesRead;
+                }
             } else {
                 if (pass.Assembler.FileSystem.FileExists(Filename)) {
                     cachedFileSize = pass.Assembler.FileSystem.GetFileSize(Filename);
@@ -318,6 +319,74 @@ class ErrorDirective : Directive
     }
 
 
+    class DefsegDirective : Directive
+    {
+        public DefsegDirective(int iInstruction, int iSourceLine, string name, IList<SegmentAttribute> attributes, out Error error) 
+        :base(iInstruction, iSourceLine) {
+            error = Error.None;
+            //bool offsetNoneSpecified = false;
+
+            foreach (var attr in attributes) {
+                var attName = attr.name;
+                var attValue = attr.value;
+                if ("OUTPUT".Equals(attName, StringComparison.OrdinalIgnoreCase)) {
+                    outputExpressions.Add(attValue);
+                    //if (bankAddressFormatTest.IsMatch(attr.value)) {
+                    //    var bank = Hex.ParseHex(attr.value.Substring(0, 2))[0];
+                    //    var addressBytes = Hex.ParseHex(attr.value.Substring(3));
+                    //    var address = addressBytes[0] | ((int)addressBytes[1] << 8);
+                    //}else if ("NONE".Equals(attr.value, StringComparison.OrdinalIgnoreCase)) {
+                    //    offsetNoneSpecified = true;
+                    //}
+                } else { // todo: other parameters
+                }
+            }
+        }
+
+        public override void Process(Pass pass, out Error error) {
+            throw new NotImplementedException();
+        }
+
+        List<string> outputExpressions = new List<string>();
+        AsmValue? baseAddress;
+        string segNamespace;
+        int? size;
+        ushort? addressLimit;
+        AsmValue? padding;
+
+        /// <summary>Regex to test for BB:AAAA format</summary>
+        static Regex bankAddressFormatTest = new Regex("(?:\\d|[a-fA-F]){2}:(?:\\d|[a-fA-F]){4}");
+    }
+
+    struct SegmentAttribute
+    {
+        /// <summary></summary>
+        /// <param name="name">A TRIMMED string containing the name</param>
+        /// <param name="value">A TRIMMED string containing the parameter value.</param>
+        public SegmentAttribute(string name, string value) { this.name = name; this.value = value; }
+        /// <summary>Name of the attribute.</summary>
+        public string name;
+        /// <summary>Value string for the attribute. May be an expression or other attribute-specific formula.</summary>
+        public string value;
+    }
+
+    class SegmentDirective : Directive
+    {
+        public string Name { get; private set; }
+        public SegmentDirective(int iInstruction, int iSourceLine, string name)
+        :base(iInstruction, iSourceLine) {
+            this.Name = name;
+        }
+
+        public override void Process(Pass pass, out Error error) {
+            bool failed = pass.SelectSegment(this.Name);
+            if (failed) {
+                error = new Error(ErrorCode.Value_Not_Defined, string.Format(Error.Msg_SegmentDefined_Name, this.Name));
+            } else {
+                error = Error.None;
+            }
+        }
+    }
     // Todo: hex directive
 
 

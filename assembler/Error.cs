@@ -32,7 +32,9 @@ namespace snarfblasm
 
         public static string Msg_Engine_InvalidState = "(internal error) Invalid state.";
 
+        public static string Msg_ExpectedSegAttr = "Expected segment attribute.";
         public static string Msg_ExpectedValue = "Expected value.";
+        public static string Msg_ExpectedName = "Expected identifier.";
         public static string Msg_ExpectedText = "Expected symbol.";
         public static string Msg_NoTextExpected = "No text expected.";
         public static string Msg_ExpectedCommaOrEndline = "Expected comma or end of line.";
@@ -57,6 +59,7 @@ namespace snarfblasm
         public static string Msg_BadNumberFormat = "Invalid number format.";
         public static string Msg_ValueOutOfRange = "Number out of range.";
         public static string Msg_ValueNotDefined_Name = "Value {0} is not defined.";
+        public static string Msg_SegmentDefined_Name = "Segment {0} is not defined.";
         public static string Msg_AnonLabelNotFound = "Anonymous label could not be found.";
         public static string Msg_ValueNotByte = "Specified value is not a byte.";
         public static string Msg_ValueNotWord = "Specified value is not a word.";
@@ -130,6 +133,10 @@ namespace snarfblasm
         Invalid_Escape,
         /// <summary>A non-ASCII character was encountered.</summary>
         Expected_Ascii,
+        /// <summary>An identifier was expected but was not present.</summary>
+        Expected_Name,
+        /// <summary>A segment attribute was expected but was not found.</summary>
+        Expected_SegAttr,
         /// <summary>ENUM directives were nested.</summary>
         Nested_Enum,
         /// <summary>ENDE or ENDENUM encountered without a preceeding ENUM directive.</summary>

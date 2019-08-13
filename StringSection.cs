@@ -180,6 +180,9 @@ namespace Romulus
         public bool Equals(StringSection s) {
             return Compare(this, s, false) == 0;
         }
+        public bool Equals(StringSection s, bool ignoreCase) {
+            return Compare(this, s, ignoreCase) == 0;
+        }
 
         public override int GetHashCode() {
             return ToString().GetHashCode();

@@ -18,37 +18,13 @@ namespace snarfblasm
         }
 
         Identifier mostRecentNamedLabel = new Identifier("_nolabel_", null);
+        /// <summary>If true, lines are processed as part of a segment definition.</summary>
+        bool DefsegInProgress = false;
+        /// <summary>Name of segment being defined. (Applicable when DefsegInProgress is true.)</summary>
+        string segName = null;
 
+        List<SegmentAttribute> segAttributes;
 
-        //// Todo: Move TryToConvertToZeroPage and FindOpcode to another class, probably assembler. 
-        //// (The only reason they need to be instance methods is for AllowInvalidOpcodes, but this
-        ////  could also be specified as a parameter).
-        //public bool TryToConvertToZeroPage(ref ParsedInstruction instruction, bool allowInvalidOpcodes) {
-        //    var op = Opcode.allOps[instruction.opcode];
-        //    var addressing = op.addressing;
-        //    Opcode.addressing newAddressing = addressing;
-
-        //    switch (addressing) {
-        //        case Opcode.addressing.absolute:
-        //            newAddressing = Opcode.addressing.zeropage;
-        //            break;
-        //        case Opcode.addressing.absoluteIndexedX:
-        //            newAddressing = Opcode.addressing.zeropageIndexedX;
-        //            break;
-        //        case Opcode.addressing.absoluteIndexedY:
-        //            newAddressing = Opcode.addressing.zeropageIndexedY;
-        //            break;
-        //    }
-
-        //    if (addressing == newAddressing) return false;
-
-        //    int newOpcode = Opcode.FindOpcode(op.name, newAddressing, allowInvalidOpcodes);
-        //    if (newOpcode >= 0) {
-        //        instruction = new ParsedInstruction(instruction, (byte)newOpcode);
-        //        return true;
-        //    }
-        //    return false;
-        //}
 
         /// <summary>
         /// Parses code from a list of sub-strings. (Useful if the code
@@ -78,11 +54,15 @@ namespace snarfblasm
         /// <param name="line">The line of code to parse.</param>
         /// <param name="sourceLine">The line number of the code file.</param>
         void ParseLine(StringSection line, int iSourceLine, out Error error) {
+            line = line.TrimLeft();
+            RemoveComments(ref line);
+
+            if (DefsegInProgress) {
+                ParseDefsegLine(line, iSourceLine, out error);
+            }
 
             error = Error.None;
 
-            line = line.TrimLeft();
-            RemoveComments(ref line);
 
             int newInstructionIndex = assembly.ParsedInstructions.Count;
 
@@ -100,11 +80,29 @@ namespace snarfblasm
 
             // Dot-prefixed directive
             if (line[0] == '.') {
+                var lineCopy = line;
+
                 line = line.Substring(1);
                 var directiveName = GrabSimpleName(ref line).ToString();
                 line = line.TrimLeft();
 
-                if (!ParseDirective(directiveName, line, iSourceLine, out error)) {
+                if (directiveName.Equals("DEFSEG")) {
+                    var segmentName = GrabSimpleName(ref line);
+                    line = line.TrimLeft();
+
+                    if (segmentName.Length == 0) {
+                        error = new Error(ErrorCode.Expected_Name, Error.Msg_ExpectedName, iSourceLine);
+                    } else if (line.Length > 0) {
+                        error = new Error(ErrorCode.Invalid_Directive_Value, string.Format(Error.Msg_InvalidSymbolName_name, lineCopy));
+                    } else {
+                        DefsegInProgress = true;
+
+                        segName = segmentName.ToString();
+                        segAttributes = new List<SegmentAttribute>();
+
+                        return;
+                    }
+                } else if (!ParseDirective(directiveName, line, iSourceLine, out error)) {
                     error = new Error(ErrorCode.Directive_Not_Defined, string.Format(Error.Msg_DirectiveUndefined_name, directiveName), iSourceLine);
                     return;
                 }
@@ -162,6 +160,49 @@ namespace snarfblasm
                     }
                 }
             } while (parsedUncolonedLabel && loopAgain);
+        }
+
+        private void ParseDefsegLine(StringSection line, int iSourceLine, out Error error) {
+            error = Error.None;
+            line = line.Trim();
+            if (line.IsNullOrEmpty) return;
+            if (line.Equals(".ENDDEF", true)) {
+                GenerateSegDef(false);
+                DefsegInProgress = false;
+                return;
+            } else if (line.Equals(".SEGMENT")) {
+                GenerateSegDef(true);
+                DefsegInProgress = false;
+                // Todo: generate .SEGMENT directive for the just-defined segment
+                return;
+            }
+            
+            var iEquals = line.IndexOf('=');
+            if (iEquals < 0) {
+                error = new Error(ErrorCode.Expected_SegAttr, Error.Msg_ExpectedSegAttr, iSourceLine);
+                return;
+            }
+
+            // Get name and value
+            StringSection name, valueString;
+            line.Split(iEquals, out name, out valueString);
+            name = name.TrimRight();
+            valueString = valueString.TrimLeft();
+            if (name.IsNullOrEmpty) {
+                error = new Error(ErrorCode.Expected_Name, Error.Msg_ExpectedName, iSourceLine);
+            } else if (valueString.IsNullOrEmpty) {
+                error = new Error(ErrorCode.Expected_Expression, Error.Msg_ExpectedValue, iSourceLine);
+            }
+            if (error.IsError) return;
+
+            segAttributes.Add(new SegmentAttribute(name.ToString(), valueString.ToString()));
+            
+        }
+
+        /// <param name="enterSegment">If true, a SEGMENT directive will be generated after the DEFSEG directive.</param>
+        private void GenerateSegDef(bool enterSegment) {
+            
+            //assembly.Directives.Add(new OrgDirective(NextInstructionIndex, sourceLine, new AsmValue(line.ToString())));
         }
 
 

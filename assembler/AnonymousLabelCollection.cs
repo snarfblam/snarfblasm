@@ -47,7 +47,9 @@ namespace snarfblasm
             while (labelIndex >= 0) {
                 var currentLabel = entries[labelIndex];
 
-                if (currentLabel.type == entryType.Star) {
+                if (currentLabel.voided) {
+                    // ignore
+                }else if (currentLabel.type == entryType.Star) {
                     starLevel++;
                     if (level == starLevel)
                         return currentLabel.value;
@@ -191,6 +193,16 @@ namespace snarfblasm
             entries[iEntry_Resolution] = new entry(currentEntry, address);
             iEntry_Resolution++;
         }
+
+        /// <summary>Marks the next anonymous label as 'void'. It will be ignored when resolving anonymous label references.</summary>
+        public void VoidNextPointer() {
+            if (iEntry_Resolution >= entries.Count)
+                throw new InvalidOperationException("No remaining entries to void.");
+
+            var currentEntry = entries[iEntry_Resolution];
+            entries[iEntry_Resolution] = currentEntry.Void();
+            iEntry_Resolution++;
+        }
         
         struct entry
         {
@@ -199,17 +211,26 @@ namespace snarfblasm
                 this.level = level;
                 this.iSourceLine = iSourceLine;
                 this.value = 0;
+                this.voided = false;
             }
             public entry(entry original, ushort value) {
                 this = original;
                 this.value = value;
+                this.voided = false;
             }
-
+            private entry(entry original, bool voided) {
+                this = original;
+                this.voided = voided;
+            }
             public readonly entryType type;
             public readonly int level;
             public readonly int iSourceLine;
             public readonly ushort value;
+            public readonly bool voided;
 
+            public entry Void() {
+                return new entry(this, true);
+            }
         }
         enum entryType:byte
         {
