@@ -56,6 +56,7 @@ namespace snarfblasm
         void ParseLine(StringSection line, int iSourceLine, out Error error) {
             line = line.TrimLeft();
             RemoveComments(ref line);
+            line = line.TrimRight();
 
             if (DefsegInProgress) {
                 ParseDefsegLine(line, iSourceLine, out error);

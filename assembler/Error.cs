@@ -58,6 +58,10 @@ namespace snarfblasm
         public static string Msg_OrgLessThanCurrent = ".ORG address can not be less than the current address.";
         public static string Msg_BadNumberFormat = "Invalid number format.";
         public static string Msg_ValueOutOfRange = "Number out of range.";
+        public static string Msg_UByteOutOfRange = "Expression resulted in an overflow (byte)";
+        public static string Msg_SByteOutOfRange = "Expression resulted in an overflow (signed byte)";
+        public static string Msg_UWordOutOfRange = "Expression resulted in an overflow (word)";
+        public static string Msg_SWordOutOfRange = "Expression resulted in an overflow (signed word)";
         public static string Msg_ValueNotDefined_Name = "Value {0} is not defined.";
         public static string Msg_SegmentDefined_Name = "Segment {0} is not defined.";
         public static string Msg_AnonLabelNotFound = "Anonymous label could not be found.";

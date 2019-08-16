@@ -53,7 +53,7 @@ namespace snarfblasm
         public bool AllowInvalidOpcodes { get { return _AllowInvalidOpcodes; } set { Require_BeforeAssemble(); _AllowInvalidOpcodes = value; } }
 
         public OverflowChecking OverflowChecking {
-            get { return OverflowChecking; }
+            get { return _OverflowChecking; }
             set {
                 Require_BeforeAssemble();
                 _OverflowChecking = value;
@@ -191,9 +191,9 @@ namespace snarfblasm
 
         private void PerformPass(Pass passObject) {
             // Start with commandline/user specified checking (can be changed via directives)
-            Evaluator.OverflowChecking = (_OverflowChecking != OverflowChecking.None) && passObject.AllowOverflowErrors;
+            evaluator.OverflowChecking = (_OverflowChecking != OverflowChecking.None) && passObject.AllowOverflowErrors;
             evaluator.SignedMode = _OverflowChecking == OverflowChecking.Signed;
-            
+
             CurrentPass = passObject;
             CurrentPass.RunPass();
 

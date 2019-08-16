@@ -14,10 +14,13 @@ namespace snarfblasm
         public ExpressionEvaluator(IValueNamespace valueNamespace) {
             this.ValueNamespace = valueNamespace;
             ErrorOnUndefinedSymbols = true;
+            //this.IntermediateOverflowChecking = true;
         }
 
         public bool SignedMode { get; set; }
         public bool OverflowChecking { get; set; }
+        ///// <summary>If true, overflow checking will be performed at each step of the computation, provided that OverflowChecking is also true.</summary>
+        //public bool IntermediateOverflowChecking { get; set; }
         //public string MostRecentNamedLabel { get; set; } // Used to evaluate local labels (e.g. @looptop)
         public NameGetter MostRecentNamedLabelGetter { get; set; } // Used to evaluate local labels (e.g. @looptop)
         
@@ -293,6 +296,8 @@ namespace snarfblasm
        
 
         private ParseStackItem CombineParseStackItems(ParseStackItem a, ParseStackItem b, out Error error) {
+            error = Error.None;
+            
             var combiningOperator = BinaryExpressionOperator.Operators[a.OperatorLevel][a.OperatorIndex];
 
             bool aIsSigned =SignedMode && (combiningOperator.SignedOperands == SignedOperatonMode.Full || combiningOperator.SignedOperands == SignedOperatonMode.LHand);
@@ -302,6 +307,8 @@ namespace snarfblasm
 
             int resultValue = combiningOperator.Operation(aValue, bValue);
             bool resultIsByte = GetBinaryIsbyte(combiningOperator.ResultType, a.Value.IsByte, b.Value.IsByte);
+
+            OverflowCheck(resultValue, resultIsByte, ref error);
 
             ParseStackItem newItem;
             var value = MakeLiteral(resultValue, resultIsByte);
@@ -313,8 +320,26 @@ namespace snarfblasm
             newItem.OperatorIndex = b.OperatorIndex;
             newItem.OperatorLevel = b.OperatorLevel;
 
-            error = Error.None; 
             return newItem;
+        }
+
+        void OverflowCheck(int value, bool isByte, ref Error error) {
+            if(this.OverflowChecking) {
+                if(this.SignedMode) {
+                    if (isByte) {
+                        if (value < -128 || value > 0x7F) error = new Error(ErrorCode.Overflow, Error.Msg_SByteOutOfRange); 
+                    } else {
+                        if (value < -32768 || value > 0x7FFF) error = new Error(ErrorCode.Overflow, Error.Msg_SWordOutOfRange); 
+                    }
+                } else { // (unsigned)
+                    if (isByte) {
+                        if (value < 0 || value > 0xFF) error = new Error(ErrorCode.Overflow, Error.Msg_SByteOutOfRange);
+                    } else {
+                        if (value < 0 || value > 0xFFFF) error = new Error(ErrorCode.Overflow, Error.Msg_UByteOutOfRange);
+                    }
+
+                }
+            }
         }
 
         private bool GetBinaryIsbyte(ExpressionResultType expressionResultType, bool aIsByte, bool bIsByte) {

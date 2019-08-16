@@ -48,6 +48,20 @@ namespace snarfblasm
                     ProcessArg(arg, isFirstArg, out exit);
                     if(exit) return;
                 }
+
+                if (switches.Asm6Mode == OnOffSwitch.ON) {
+                    Console.WriteLine("WARNING: ASM6 mode is no longer supported.");
+                    switches.Asm6Mode = null;
+                }
+                if (switches.ColonOptional == OnOffSwitch.ON) {
+                    Console.WriteLine("WARNING: Optional colon mode is no longer supported.");
+                    switches.ColonOptional = null;
+                }
+                if (switches.DotOptional == OnOffSwitch.ON) {
+                    Console.WriteLine("WARNING: Optional directive dot mode is no longer supported.");
+                    switches.DotOptional = null;
+                }
+
                 RunAssembler();
             }
 
@@ -67,6 +81,7 @@ namespace snarfblasm
             }
 
             Assembler asm = new Assembler(Path.GetFileName(sourceFile), fileSystem.GetFileText(sourceFile), fileSystem);
+            asm.OverflowChecking = switches.Checking ?? OverflowChecking.None;
             AddressLabels asmLabels = new AddressLabels();
             asm.Labels = asmLabels;
 
@@ -430,13 +445,13 @@ namespace snarfblasm
 
             switch (value.ToUpper()) {
                 case "ON":
-                    switches.Checking = CheckingSwitch.ON;
+                    switches.Checking = OverflowChecking.Unsigned;
                     break;
                 case "OFF":
-                    switches.Checking = CheckingSwitch.OFF;
+                    switches.Checking = OverflowChecking.None;
                     break;
                 case "SIGNED":
-                    switches.Checking = CheckingSwitch.SIGNED;
+                    switches.Checking = OverflowChecking.Signed;
                     break;
                 default:
                     Console.WriteLine("Value " + value + " is invalid for -CHEKCING");
@@ -647,7 +662,7 @@ namespace snarfblasm
     struct ProgramSwitches
     {
         public int? PatchOffset;
-        public CheckingSwitch? Checking;
+        public OverflowChecking? Checking;
         public OnOffSwitch? DotOptional;
         public OnOffSwitch? ColonOptional;
         public OnOffSwitch? Asm6Mode;
@@ -657,12 +672,12 @@ namespace snarfblasm
 
     }
 
-    enum CheckingSwitch
-    {
-        OFF,
-        ON,
-        SIGNED
-    }
+    //enum CheckingSwitch
+    //{
+    //    OFF,
+    //    ON,
+    //    SIGNED
+    //}
     enum OnOffSwitch
     {
         ON,
